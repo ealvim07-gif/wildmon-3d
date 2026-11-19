@@ -293,39 +293,58 @@ func _build_biome_floor_patches() -> void:
 		_add_biome_floor_patch(rocky_centers[i], 7.2, 5.8, Color(0.34, 0.33, 0.28), 250 + i)
 
 func _add_biome_floor_patch(center: Vector2, radius_x: float, radius_z: float, base_color: Color, seed: int) -> void:
-	var segments := 28
+	# Cinco faixas concêntricas irregulares fazem a cor do bioma desaparecer
+	# gradualmente no gramado, evitando bordas circulares e manchas abruptas.
+	var segments := 40
+	var ring_count := 5
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var center_pos := Vector3(center.x, _terrain_height(center.x, center.y) + 0.075, center.y)
-	var center_color := base_color.lerp(Color(0.13, 0.15, 0.11), 0.12)
+	var grass_color := Color(0.19, 0.30, 0.13)
+	var center_pos := Vector3(center.x, _terrain_height(center.x, center.y) + 0.065, center.y)
+	var center_color := base_color.lerp(grass_color, 0.04)
 	for i in range(segments):
 		var angle_a := TAU * float(i) / float(segments)
 		var angle_b := TAU * float(i + 1) / float(segments)
 		var wave_a := 1.0 + sin(angle_a * 3.0 + float(seed)) * 0.105 + cos(angle_a * 5.0 - float(seed)) * 0.055
 		var wave_b := 1.0 + sin(angle_b * 3.0 + float(seed)) * 0.105 + cos(angle_b * 5.0 - float(seed)) * 0.055
-		var point_a := Vector3(
-			center.x + cos(angle_a) * radius_x * wave_a,
-			0.0,
-			center.y + sin(angle_a) * radius_z * wave_a
-		)
-		var point_b := Vector3(
-			center.x + cos(angle_b) * radius_x * wave_b,
-			0.0,
-			center.y + sin(angle_b) * radius_z * wave_b
-		)
-		point_a.y = _terrain_height(point_a.x, point_a.z) + 0.075
-		point_b.y = _terrain_height(point_b.x, point_b.z) + 0.075
-		var variation_a := 0.08 + absf(sin(angle_a * 4.0 + float(seed))) * 0.16
-		var variation_b := 0.08 + absf(sin(angle_b * 4.0 + float(seed))) * 0.16
-		var color_a := base_color.lerp(Color(0.52, 0.48, 0.34), variation_a)
-		var color_b := base_color.lerp(Color(0.52, 0.48, 0.34), variation_b)
-		# Ordem dos vértices voltada para cima.
-		surface.set_color(center_color)
-		surface.add_vertex(center_pos)
-		surface.set_color(color_b)
-		surface.add_vertex(point_b)
-		surface.set_color(color_a)
-		surface.add_vertex(point_a)
+		var outer_a := Vector3(center.x + cos(angle_a) * radius_x * wave_a, 0.0, center.y + sin(angle_a) * radius_z * wave_a)
+		var outer_b := Vector3(center.x + cos(angle_b) * radius_x * wave_b, 0.0, center.y + sin(angle_b) * radius_z * wave_b)
+		outer_a.y = _terrain_height(outer_a.x, outer_a.z) + 0.065
+		outer_b.y = _terrain_height(outer_b.x, outer_b.z) + 0.065
+		var variation_a := 0.07 + absf(sin(angle_a * 4.0 + float(seed))) * 0.12
+		var variation_b := 0.07 + absf(sin(angle_b * 4.0 + float(seed))) * 0.12
+		var edge_color_a := base_color.lerp(Color(0.52, 0.48, 0.34), variation_a)
+		var edge_color_b := base_color.lerp(Color(0.52, 0.48, 0.34), variation_b)
+		for band in range(ring_count):
+			var inner_ratio := float(band) / float(ring_count)
+			var outer_ratio := float(band + 1) / float(ring_count)
+			var inner_a := center_pos.lerp(outer_a, inner_ratio)
+			var inner_b := center_pos.lerp(outer_b, inner_ratio)
+			var band_outer_a := center_pos.lerp(outer_a, outer_ratio)
+			var band_outer_b := center_pos.lerp(outer_b, outer_ratio)
+			inner_a.y = _terrain_height(inner_a.x, inner_a.z) + 0.065
+			inner_b.y = _terrain_height(inner_b.x, inner_b.z) + 0.065
+			var inner_blend := clampf((inner_ratio - 0.38) / 0.62, 0.0, 1.0)
+			var outer_blend := clampf((outer_ratio - 0.38) / 0.62, 0.0, 1.0)
+			inner_blend = inner_blend * inner_blend * (3.0 - 2.0 * inner_blend)
+			outer_blend = outer_blend * outer_blend * (3.0 - 2.0 * outer_blend)
+			var color_inner_a := base_color.lerp(grass_color, inner_blend).lerp(edge_color_a, variation_a * 0.45)
+			var color_inner_b := base_color.lerp(grass_color, inner_blend).lerp(edge_color_b, variation_b * 0.45)
+			var color_outer_a := base_color.lerp(grass_color, outer_blend).lerp(edge_color_a, variation_a * 0.45)
+			var color_outer_b := base_color.lerp(grass_color, outer_blend).lerp(edge_color_b, variation_b * 0.45)
+			# Dois triângulos por faixa, com a face voltada para cima.
+			surface.set_color(color_inner_a)
+			surface.add_vertex(inner_a)
+			surface.set_color(color_outer_b)
+			surface.add_vertex(band_outer_b)
+			surface.set_color(color_outer_a)
+			surface.add_vertex(band_outer_a)
+			surface.set_color(color_inner_a)
+			surface.add_vertex(inner_a)
+			surface.set_color(color_inner_b)
+			surface.add_vertex(inner_b)
+			surface.set_color(color_outer_b)
+			surface.add_vertex(band_outer_b)
 	surface.generate_normals()
 	var patch := MeshInstance3D.new()
 	patch.mesh = surface.commit()

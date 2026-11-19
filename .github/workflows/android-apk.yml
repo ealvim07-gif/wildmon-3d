@@ -38,6 +38,56 @@ jobs:
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
             --check-only --script res://scripts/game.gd
 
+      - name: Validate Android preset without exporting
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import configparser
+          import re
+          from pathlib import Path
+
+          path = Path("export_presets.cfg")
+          if not path.is_file():
+              raise SystemExit("FAIL: export_presets.cfg is missing")
+
+          cfg = configparser.ConfigParser(interpolation=None)
+          cfg.read(path, encoding="utf-8")
+          section = "preset.0"
+          options = "preset.0.options"
+          if section not in cfg or options not in cfg:
+              raise SystemExit("FAIL: Android preset sections are incomplete")
+
+          preset = cfg[section]
+          opts = cfg[options]
+          checks = {
+              "platform is Android": preset.get("platform") == "Android",
+              "APK output path is configured": preset.get("export_path", "").endswith(".apk"),
+              "package identifier is valid": bool(re.fullmatch(
+                  r"[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+", opts.get("package/unique_name", "")
+              )),
+              "version code is positive": opts.getint("version/code", fallback=0) > 0,
+              "version name is present": bool(opts.get("version/name", "").strip()),
+              "arm64-v8a is enabled": opts.getboolean("architectures/arm64-v8a", fallback=False),
+              "at least one Android architecture is enabled": any(
+                  opts.getboolean(f"architectures/{arch}", fallback=False)
+                  for arch in ("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+              ),
+              "Gradle build is disabled (prebuilt template)": not opts.getboolean(
+                  "gradle_build/use_gradle_build", fallback=True
+              ),
+              "no custom template paths are configured": not opts.get("custom_template/debug", "").strip()
+                  and not opts.get("custom_template/release", "").strip(),
+              "legacy/unsupported orientation preset key is absent": "screen/orientation" not in opts,
+          }
+
+          for label, passed in checks.items():
+              print(f"{'PASS' if passed else 'FAIL'}: {label}")
+          if not all(checks.values()):
+              raise SystemExit("Android preset validation failed.")
+          print("Android preset checks passed. No export was performed.")
+          PY
+
       - name: Import project and validate resources
         shell: bash
         run: |

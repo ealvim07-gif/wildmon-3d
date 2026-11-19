@@ -124,8 +124,10 @@ func _build_world() -> void:
 	env.tonemap_exposure = 1.08
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.65, 0.75, 0.78)
-	env.fog_density = 0.006
-	env.fog_sky_affect = 0.55
+	env.fog_density = 0.0045
+	env.fog_sky_affect = 0.62
+	env.adjustment_enabled = true
+	env.adjustment_saturation = 1.08
 	world_env.environment = env
 	add_child(world_env)
 
@@ -134,7 +136,7 @@ func _build_world() -> void:
 	sun.light_energy = 1.45
 	sun.light_color = Color(1.0, 0.91, 0.78)
 	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 65.0
+	sun.directional_shadow_max_distance = 52.0
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
 	add_child(sun)
 
@@ -248,8 +250,9 @@ func _build_waterhole() -> void:
 	water.position = shore.position + Vector3(0.0, 0.10, 0.0)
 	var water_mat := StandardMaterial3D.new()
 	water_mat.albedo_color = Color(0.12, 0.39, 0.49, 0.88)
-	water_mat.roughness = 0.18
-	water_mat.metallic = 0.12
+	water_mat.roughness = 0.24
+	water_mat.metallic = 0.04
+	water_mat.disable_receive_shadows = true
 	water_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	water_mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
 	water.material_override = water_mat
@@ -634,8 +637,9 @@ func _add_sphere_part(parent: Node3D, pos: Vector3, size: Vector3, color: Color)
 	var mesh := SphereMesh.new()
 	mesh.radius = 1.0
 	mesh.height = 2.0
-	mesh.radial_segments = 16
-	mesh.rings = 10
+	# Malha facetada: silhuetas menos infladas e mais próximas de modelos 3D estilizados.
+	mesh.radial_segments = 10
+	mesh.rings = 6
 	part.mesh = mesh
 	part.position = pos
 	part.scale = size
@@ -647,6 +651,8 @@ func _add_capsule_part(parent: Node3D, pos: Vector3, size: Vector3, color: Color
 	var mesh := CapsuleMesh.new()
 	mesh.radius = 0.5
 	mesh.height = 2.0
+	mesh.radial_segments = 8
+	mesh.rings = 3
 	part.mesh = mesh
 	part.position = pos
 	part.scale = size

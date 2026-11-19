@@ -645,21 +645,52 @@ func _build_trail() -> void:
 	add_child(trail)
 
 func _build_distant_ridges() -> void:
-	# Silhuetas facetadas em vez de montes esféricos repetidos.
-	for i in range(12):
-		var ridge := MeshInstance3D.new()
-		var mesh := CylinderMesh.new()
-		mesh.top_radius = 0.15 + float(i % 3) * 0.22
-		mesh.bottom_radius = 7.0 + float(i % 4) * 2.0
-		mesh.height = 10.0 + float(i % 5) * 2.5
-		mesh.radial_segments = 7 + (i % 3)
-		mesh.rings = 1
-		ridge.mesh = mesh
-		var angle := TAU * float(i) / 12.0
-		ridge.position = Vector3(cos(angle) * 76.0, mesh.height * 0.40 - 1.0, sin(angle) * 76.0)
-		ridge.rotation.y = angle * 0.37
-		ridge.material_override = _mat([Color(0.20, 0.32, 0.26), Color(0.25, 0.37, 0.29), Color(0.29, 0.39, 0.31)][i % 3])
-		add_child(ridge)
+	# Cordilheira baixa facetada no horizonte, com picos assimétricos conectados.
+	# Uma única malha mantém o custo de desenho reduzido no Android.
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var palette := [
+		Color(0.30, 0.43, 0.40),
+		Color(0.35, 0.48, 0.44),
+		Color(0.40, 0.51, 0.46),
+		Color(0.27, 0.39, 0.38)
+	]
+	for i in range(16):
+		var angle := TAU * float(i) / 16.0
+		var radial := Vector3(cos(angle), 0.0, sin(angle))
+		var tangent := Vector3(-sin(angle), 0.0, cos(angle))
+		var center := radial * 70.0
+		var half_width := 7.0 + float(i % 4) * 1.8
+		var base_left := center - tangent * half_width
+		var base_right := center + tangent * half_width
+		var peak_height := 8.0 + float((i * 7) % 6) * 1.7
+		var peak := center + radial * (3.0 + float(i % 3) * 2.0) + Vector3(0.0, peak_height, 0.0)
+		var shoulder := center + radial * 2.0 + Vector3(0.0, peak_height * 0.42, 0.0)
+		var color_a: Color = palette[i % palette.size()]
+		var color_b: Color = palette[(i + 1) % palette.size()]
+		# Face esquerda e direita formam uma silhueta quebrada, não cones repetidos.
+		surface.set_color(color_a)
+		surface.add_vertex(base_left)
+		surface.set_color(color_b)
+		surface.add_vertex(peak)
+		surface.set_color(color_a.darkened(0.12))
+		surface.add_vertex(shoulder)
+		surface.set_color(color_a.darkened(0.08))
+		surface.add_vertex(shoulder)
+		surface.set_color(color_b.lightened(0.05))
+		surface.add_vertex(peak)
+		surface.set_color(color_b.darkened(0.18))
+		surface.add_vertex(base_right)
+	surface.generate_normals()
+	var ridge := MeshInstance3D.new()
+	ridge.name = "DistantMountainRange"
+	ridge.mesh = surface.commit()
+	var ridge_material := StandardMaterial3D.new()
+	ridge_material.vertex_color_use_as_albedo = true
+	ridge_material.roughness = 1.0
+	ridge_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	ridge.material_override = ridge_material
+	add_child(ridge)
 
 func _waterline_radius(angle: float) -> float:
 	return 1.0 + sin(angle * 2.0 + 0.45) * 0.075 + cos(angle * 3.0 - 0.8) * 0.045 + sin(angle * 5.0 + 1.7) * 0.025

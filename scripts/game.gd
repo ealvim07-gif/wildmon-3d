@@ -993,9 +993,14 @@ func _try_capture() -> void:
 		_update_status("Chegue mais perto da criatura para capturá-la.")
 		return
 	creature_captured = true
-	creature.queue_free()
-	creature = null
+	var captured_creature := creature
+	capture_button.disabled = true
 	capture_button.text = "CAPTURADO!"
+	var capture_tween := create_tween()
+	capture_tween.set_parallel(true)
+	capture_tween.tween_property(captured_creature, "scale", Vector3.ZERO, 0.42).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+	capture_tween.tween_property(captured_creature, "position:y", captured_creature.position.y + 1.0, 0.42).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	capture_tween.chain().tween_callback(func(): captured_creature.queue_free())
 	_update_status("Captura realizada! Você capturou um Brasafofo.")
 
 func _update_status(message: String) -> void:

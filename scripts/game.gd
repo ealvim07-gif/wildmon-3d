@@ -297,6 +297,13 @@ func _build_waterhole() -> void:
 	for i in range(18):
 		var angle := TAU * float(i) / 18.0
 		_add_rock(Vector3(-17.0 + cos(angle) * 4.45, shore.position.y + 0.08, -12.0 + sin(angle) * 4.45), i + 90)
+	# Juncos em pequenos grupos na margem, sem formar um anel artificial.
+	for i in [1, 2, 5, 8, 11, 14, 16]:
+		var angle := TAU * float(i) / 18.0
+		var radius := 4.15 + float(i % 3) * 0.32
+		var reed_x := -17.0 + cos(angle) * radius
+		var reed_z := -12.0 + sin(angle) * radius
+		_add_reed(Vector3(reed_x, _terrain_height(reed_x, reed_z) + 0.03, reed_z), 410 + i)
 
 func _build_terrain() -> void:
 	# Terrain3D gera malha com LOD e colisão própria, substituindo a malha
@@ -367,6 +374,19 @@ func _terrain_height(x: float, z: float) -> float:
 	var detail := sin(x * 0.31 + z * 0.19) * 0.16 + cos(z * 0.27 - x * 0.23) * 0.13
 	var erosion := -absf(sin(x * 0.045 + z * 0.031)) * 0.24
 	return maxf(-0.28, (rolling + ridge_a + ridge_b + detail + erosion) * edge_factor)
+
+func _add_reed(pos: Vector3, seed: int) -> void:
+	var reed_scene := _get_nature_scene(["Reed001", "Reed002"], seed)
+	if reed_scene:
+		var reeds := reed_scene.instantiate() as Node3D
+		add_child(reeds)
+		reeds.position = pos
+		var scale_factor := 0.48 + float(seed % 4) * 0.10
+		reeds.scale = Vector3.ONE * scale_factor
+		reeds.rotation.y = float(seed * 31 % 360) * PI / 180.0
+		return
+	for blade in range(3):
+		_add_box(self, pos + Vector3((float(blade) - 1.0) * 0.10, 0.38, 0.0), Vector3(0.045, 0.76, 0.045), Color(0.25, 0.39, 0.17), false)
 
 func _add_rock(pos: Vector3, seed: int) -> void:
 	var rock_scene := _get_nature_scene(["Rock_Medium_1", "Rock_Medium_2", "Rock001", "Rock002", "Rock003"], seed)

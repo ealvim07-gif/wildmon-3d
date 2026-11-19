@@ -150,13 +150,13 @@ jobs:
           set -euo pipefail
           mkdir -p build
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
-            --verbose --export-debug "Android" "build/Wildmon3D-Beta10.apk"
+            --verbose --export-debug "Android" "build/Wildmon3D-Beta20.apk"
 
       - name: Verify APK package and archive
         shell: bash
         run: |
           set -euo pipefail
-          APK="build/Wildmon3D-Beta10.apk"
+          APK="build/Wildmon3D-Beta20.apk"
           test -s "$APK"
           unzip -t "$APK"
           "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$APK" | tee "$RUNNER_TEMP/apk-badging.txt"
@@ -168,7 +168,7 @@ jobs:
       - name: Upload beta APK
         uses: actions/upload-artifact@v4
         with:
-          name: Wildmon3D-Beta10-Android-APK
-          path: build/Wildmon3D-Beta10.apk
+          name: Wildmon3D-Beta20-Android-APK
+          path: build/Wildmon3D-Beta20.apk
           if-no-files-found: error
           retention-days: 14

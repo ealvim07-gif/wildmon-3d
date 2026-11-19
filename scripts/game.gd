@@ -793,18 +793,20 @@ func _build_terrain() -> void:
 		for x in range(segments + 1):
 			var world_x := -half_size + float(x) * step
 			var world_z := -half_size + float(z) * step
-			height_values[z * (segments + 1) + x] = _terrain_height(world_x, world_z)
+			height_values[z * (segments + 1) + x] = _terrain_height(world_x, world_z) / step
 	var height_shape := HeightMapShape3D.new()
 	height_shape.map_width = segments + 1
 	height_shape.map_depth = segments + 1
 	height_shape.map_data = height_values
-	height_shape.map_scale = Vector3(step, 1.0, step)
+	
 	var terrain_body := StaticBody3D.new()
 	terrain_body.name = "TerrainCollision"
 	terrain_body.collision_layer = 1
 	terrain_body.collision_mask = 1
 	var terrain_collision := CollisionShape3D.new()
 	terrain_collision.shape = height_shape
+	# Escala uniforme é compatível com o backend de física do Godot.
+	terrain_collision.scale = Vector3.ONE * step
 	terrain_body.add_child(terrain_collision)
 	add_child(terrain_body)
 

@@ -699,12 +699,12 @@ func _add_rock(pos: Vector3, seed: int) -> void:
 		return
 	# Fallback usado apenas se a transferência dos modelos não estiver disponível.
 	var rock := MeshInstance3D.new()
-	var rock_mesh := SphereMesh.new()
-	rock_mesh.radial_segments = 6
-	rock_mesh.rings = 3
+	var rock_mesh := PrismMesh.new()
+	rock_mesh.size = Vector3(0.78, 0.52, 0.66)
 	rock.mesh = rock_mesh
 	rock.position = pos + Vector3(0, 0.18, 0)
-	rock.scale = Vector3(0.48, 0.30, 0.40)
+	rock.rotation.y = float(seed * 31 % 360) * PI / 180.0
+	rock.scale = Vector3(0.82, 0.72, 0.86)
 	rock.material_override = _mat(Color(0.39, 0.42, 0.39))
 	add_child(rock)
 
@@ -879,7 +879,8 @@ func _build_creature() -> void:
 		ear.material_override = _mat(body_color)
 		creature.add_child(ear)
 		creature_ear_parts.append(ear)
-		_add_box(creature, Vector3(side * 0.23, 0.64, 0.43), Vector3(0.075, 0.22, 0.035), Color(1.0, 0.58, 0.25), false)
+		_add_prism_part(creature, Vector3(side * 0.23, 0.64, 0.435), Vector3(0.085, 0.25, 0.045), flame_color)
+		_add_faceted_part(creature, Vector3(side * 0.27, 0.18, 0.48), Vector3(0.11, 0.075, 0.035), highlight_color)
 		_add_faceted_part(creature, Vector3(side * 0.16, 0.39, 0.64), Vector3(0.065, 0.085, 0.045), Color(0.98, 0.91, 0.68))
 		_add_faceted_part(creature, Vector3(side * 0.16, 0.39, 0.675), Vector3(0.027, 0.047, 0.022), Color(0.08, 0.06, 0.05))
 		var leg := _add_limb_part(creature, Vector3(side * 0.40, -0.28, 0.12), Vector3(0.12, 0.26, 0.12), body_color)

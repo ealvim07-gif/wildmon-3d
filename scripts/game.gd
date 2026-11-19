@@ -74,55 +74,142 @@ func _build_world() -> void:
 	var world_env := WorldEnvironment.new()
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
-	env.sky = Sky.new()
+	var sky := Sky.new()
+	var sky_mat := ProceduralSkyMaterial.new()
+	sky_mat.sky_top_color = Color(0.20, 0.48, 0.72)
+	sky_mat.sky_horizon_color = Color(0.72, 0.84, 0.91)
+	sky_mat.ground_bottom_color = Color(0.16, 0.22, 0.16)
+	sky_mat.ground_horizon_color = Color(0.62, 0.70, 0.59)
+	sky.sky_material = sky_mat
+	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.78, 0.86, 0.96)
-	env.ambient_light_energy = 0.8
+	env.ambient_light_color = Color(0.72, 0.82, 0.91)
+	env.ambient_light_energy = 0.9
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	world_env.environment = env
 	add_child(world_env)
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-48, -28, 0)
-	sun.light_energy = 1.15
+	sun.light_energy = 1.35
+	sun.shadow_enabled = true
+	sun.directional_shadow_max_distance = 55.0
 	add_child(sun)
 
-	_add_box(self, Vector3(0, -0.35, 0), Vector3(70, 0.5, 70), Color(0.30, 0.58, 0.30), true)
-	_add_box(self, Vector3(0, -0.05, -12), Vector3(9, 0.12, 34), Color(0.72, 0.66, 0.48), false)
-	for i in range(22):
-		var px := float((i * 17) % 54) - 27.0
-		var pz := float((i * 29) % 58) - 29.0
-		if abs(px) < 7.0 and pz < 8.0 and pz > -30.0:
+	var ground := MeshInstance3D.new()
+	var ground_mesh := PlaneMesh.new()
+	ground_mesh.size = Vector2(76, 76)
+	ground.mesh = ground_mesh
+	ground.rotation.x = -PI / 2.0
+	ground.position.y = -0.12
+	ground.material_override = _mat(Color(0.29, 0.48, 0.25))
+	add_child(ground)
+	var ground_body := StaticBody3D.new()
+	ground_body.position.y = -0.32
+	add_child(ground_body)
+	var ground_shape := CollisionShape3D.new()
+	var ground_box := BoxShape3D.new()
+	ground_box.size = Vector3(76, 0.5, 76)
+	ground_shape.shape = ground_box
+	ground_body.add_child(ground_shape)
+
+	# A winding sandy trail, made from several low, overlapping sections.
+	for i in range(7):
+		var trail := MeshInstance3D.new()
+		var trail_mesh := BoxMesh.new()
+		trail_mesh.size = Vector3(7.0 + sin(float(i)) * 1.0, 0.035, 6.2)
+		trail.mesh = trail_mesh
+		trail.position = Vector3(sin(float(i) * 0.48) * 2.8, -0.075, 15.0 - float(i) * 6.0)
+		trail.rotation.y = sin(float(i) * 0.48) * 0.18
+		trail.material_override = _mat(Color(0.66, 0.56, 0.39))
+		add_child(trail)
+
+	# Soft rolling hills frame the playable clearing.
+	for hill_data in [
+		[Vector3(-29, 1.1, -20), Vector3(12, 3.2, 18)],
+		[Vector3(29, 1.0, -26), Vector3(14, 3.0, 20)],
+		[Vector3(-28, 0.8, 24), Vector3(15, 2.7, 17)],
+		[Vector3(28, 0.9, 22), Vector3(16, 3.0, 18)]
+	]:
+		var hill := MeshInstance3D.new()
+		var hill_mesh := SphereMesh.new()
+		hill_mesh.radius = 1.0
+		hill_mesh.height = 2.0
+		hill.mesh = hill_mesh
+		hill.position = hill_data[0]
+		hill.scale = hill_data[1]
+		hill.material_override = _mat(Color(0.25, 0.43, 0.24))
+		add_child(hill)
+
+	for i in range(38):
+		var px := float((i * 17) % 62) - 31.0
+		var pz := float((i * 29) % 66) - 33.0
+		if abs(px) < 8.0 and pz < 10.0 and pz > -32.0:
 			continue
 		_add_tree(Vector3(px, 0, pz))
+	for i in range(55):
+		var px := float((i * 13) % 64) - 32.0
+		var pz := float((i * 19) % 64) - 32.0
+		if abs(px) < 6.0 and pz < 10.0 and pz > -28.0:
+			continue
+		_add_plant(Vector3(px, 0, pz), i)
 
 func _add_tree(pos: Vector3) -> void:
 	var trunk := MeshInstance3D.new()
 	var trunk_mesh := CylinderMesh.new()
-	trunk_mesh.top_radius = 0.18
-	trunk_mesh.bottom_radius = 0.25
-	trunk_mesh.height = 1.7
+	trunk_mesh.top_radius = 0.16
+	trunk_mesh.bottom_radius = 0.28
+	trunk_mesh.height = 2.2
 	trunk.mesh = trunk_mesh
-	trunk.position = pos + Vector3(0, 0.85, 0)
-	trunk.material_override = _mat(Color(0.34, 0.22, 0.12))
+	trunk.position = pos + Vector3(0, 1.1, 0)
+	trunk.material_override = _mat(Color(0.30, 0.19, 0.11))
 	add_child(trunk)
-	var trunk_body := StaticBody3D.new()
-	trunk_body.position = pos + Vector3(0, 0.85, 0)
-	add_child(trunk_body)
-	var trunk_collision := CollisionShape3D.new()
-	var trunk_shape := CylinderShape3D.new()
-	trunk_shape.radius = 0.25
-	trunk_shape.height = 1.7
-	trunk_collision.shape = trunk_shape
-	trunk_body.add_child(trunk_collision)
-	var crown := MeshInstance3D.new()
-	var crown_mesh := SphereMesh.new()
-	crown_mesh.radius = 1.0
-	crown_mesh.height = 1.8
-	crown.mesh = crown_mesh
-	crown.scale = Vector3(1.0, 1.2, 1.0)
-	crown.position = pos + Vector3(0, 2.2, 0)
-	crown.material_override = _mat(Color(0.12, 0.38, 0.19))
-	add_child(crown)
+	var body := StaticBody3D.new()
+	body.position = pos + Vector3(0, 1.0, 0)
+	add_child(body)
+	var collision := CollisionShape3D.new()
+	var shape := CylinderShape3D.new()
+	shape.radius = 0.32
+	shape.height = 2.0
+	collision.shape = shape
+	body.add_child(collision)
+
+	for crown_data in [
+		[Vector3(0, 2.8, 0), 1.25],
+		[Vector3(-0.62, 2.55, 0.08), 0.86],
+		[Vector3(0.62, 2.58, -0.10), 0.92],
+		[Vector3(0.05, 3.42, 0.12), 0.84]
+	]:
+		var crown := MeshInstance3D.new()
+		var crown_mesh := SphereMesh.new()
+		crown_mesh.radius = 1.0
+		crown_mesh.height = 1.8
+		crown.mesh = crown_mesh
+		crown.position = pos + crown_data[0]
+		crown.scale = Vector3(crown_data[1], crown_data[1] * 0.92, crown_data[1])
+		crown.material_override = _mat(Color(0.13, 0.34 + float(int(pos.x * 10.0) % 3) * 0.025, 0.18))
+		add_child(crown)
+
+func _add_plant(pos: Vector3, seed: int) -> void:
+	var stem := MeshInstance3D.new()
+	var stem_mesh := CylinderMesh.new()
+	stem_mesh.top_radius = 0.025
+	stem_mesh.bottom_radius = 0.045
+	stem_mesh.height = 0.48
+	stem.mesh = stem_mesh
+	stem.position = pos + Vector3(0, 0.24, 0)
+	stem.material_override = _mat(Color(0.20, 0.38, 0.16))
+	add_child(stem)
+	if seed % 3 == 0:
+		var flower := MeshInstance3D.new()
+		var flower_mesh := SphereMesh.new()
+		flower_mesh.radius = 0.13
+		flower_mesh.height = 0.18
+		flower.mesh = flower_mesh
+		flower.position = pos + Vector3(0, 0.52, 0)
+		flower.material_override = _mat([Color(0.95, 0.72, 0.30), Color(0.92, 0.54, 0.62), Color(0.92, 0.88, 0.70)][seed % 3])
+		add_child(flower)
+
 
 func _build_player() -> void:
 	player = CharacterBody3D.new()
@@ -130,63 +217,58 @@ func _build_player() -> void:
 	add_child(player)
 	var body := CollisionShape3D.new()
 	var capsule := CapsuleShape3D.new()
-	capsule.radius = 0.42
-	capsule.height = 1.8
+	capsule.radius = 0.38
+	capsule.height = 1.75
 	body.shape = capsule
-	body.position.y = 0.9
+	body.position.y = 0.88
 	player.add_child(body)
-	var model := MeshInstance3D.new()
-	var mesh := CapsuleMesh.new()
-	mesh.radius = 0.42
-	mesh.height = 1.8
-	model.mesh = mesh
-	model.position.y = 0.9
-	model.material_override = _mat(Color(0.16, 0.42, 0.78))
-	player.add_child(model)
-	var head := MeshInstance3D.new()
-	var head_mesh := SphereMesh.new()
-	head_mesh.radius = 0.25
-	head_mesh.height = 0.5
-	head.mesh = head_mesh
-	head.position = Vector3(0, 1.85, 0)
-	head.material_override = _mat(Color(0.95, 0.72, 0.53))
-	player.add_child(head)
+
+	# Stylized explorer silhouette with layered clothing and a small field backpack.
+	_add_sphere_part(player, Vector3(0, 1.18, 0), Vector3(0.43, 0.54, 0.30), Color(0.20, 0.43, 0.62))
+	_add_sphere_part(player, Vector3(0, 1.92, 0.015), Vector3(0.31, 0.34, 0.30), Color(0.88, 0.66, 0.49))
+	_add_sphere_part(player, Vector3(0, 2.12, -0.035), Vector3(0.33, 0.20, 0.32), Color(0.22, 0.18, 0.15))
+	_add_sphere_part(player, Vector3(0, 0.63, 0), Vector3(0.34, 0.22, 0.27), Color(0.22, 0.25, 0.31))
+	_add_sphere_part(player, Vector3(0, 1.22, -0.34), Vector3(0.30, 0.40, 0.18), Color(0.78, 0.42, 0.16))
+	for side in [-1.0, 1.0]:
+		_add_capsule_part(player, Vector3(side * 0.48, 1.18, 0), Vector3(0.13, 0.40, 0.13), Color(0.88, 0.66, 0.49))
+		_add_sphere_part(player, Vector3(side * 0.49, 0.91, 0.02), Vector3(0.14, 0.14, 0.14), Color(0.88, 0.66, 0.49))
+		_add_capsule_part(player, Vector3(side * 0.19, 0.32, 0), Vector3(0.16, 0.42, 0.17), Color(0.16, 0.24, 0.34))
+		_add_sphere_part(player, Vector3(side * 0.19, 0.10, 0.10), Vector3(0.19, 0.11, 0.29), Color(0.12, 0.13, 0.15))
+	_add_sphere_part(player, Vector3(0, 1.91, 0.29), Vector3(0.045, 0.045, 0.035), Color(0.12, 0.12, 0.13))
+	_add_sphere_part(player, Vector3(0.17, 1.97, 0.27), Vector3(0.035, 0.045, 0.025), Color(0.10, 0.10, 0.11))
 
 	camera = Camera3D.new()
 	camera.current = true
-	camera.fov = 70
+	camera.fov = 68
 	add_child(camera)
-	camera.global_position = Vector3(0, 4, 11)
+	camera.global_position = Vector3(0, 4.2, 11.5)
 	camera.look_at(Vector3(0, 1, 0))
+
 
 func _build_creature() -> void:
 	creature = Node3D.new()
-	creature.position = Vector3(2.5, 0.75, -9)
+	creature.position = Vector3(2.5, 0.72, -9)
 	add_child(creature)
-	var core := MeshInstance3D.new()
-	var sphere := SphereMesh.new()
-	sphere.radius = 0.72
-	sphere.height = 1.4
-	core.mesh = sphere
-	core.material_override = _mat(Color(0.95, 0.55, 0.18))
-	creature.add_child(core)
-	var belly := MeshInstance3D.new()
-	var belly_mesh := SphereMesh.new()
-	belly_mesh.radius = 0.43
-	belly_mesh.height = 0.8
-	belly.mesh = belly_mesh
-	belly.position = Vector3(0, -0.25, 0.38)
-	belly.material_override = _mat(Color(1.0, 0.84, 0.54))
-	creature.add_child(belly)
+	# Brasafofo: a small fox-like fire creature with a curled flame tail.
+	_add_sphere_part(creature, Vector3(0, 0.02, 0), Vector3(0.72, 0.48, 0.43), Color(0.91, 0.35, 0.12))
+	_add_sphere_part(creature, Vector3(0, 0.32, 0.37), Vector3(0.43, 0.40, 0.39), Color(0.98, 0.48, 0.16))
+	_add_sphere_part(creature, Vector3(0, 0.12, 0.66), Vector3(0.27, 0.20, 0.16), Color(1.0, 0.83, 0.55))
 	for side in [-1.0, 1.0]:
-		var eye := MeshInstance3D.new()
-		var eye_mesh := SphereMesh.new()
-		eye_mesh.radius = 0.09
-		eye_mesh.height = 0.18
-		eye.mesh = eye_mesh
-		eye.position = Vector3(side * 0.25, 0.18, 0.61)
-		eye.material_override = _mat(Color(0.08, 0.08, 0.10))
-		creature.add_child(eye)
+		var ear := MeshInstance3D.new()
+		var ear_mesh := PrismMesh.new()
+		ear_mesh.size = Vector3(0.25, 0.42, 0.18)
+		ear.mesh = ear_mesh
+		ear.position = Vector3(side * 0.27, 0.68, 0.34)
+		ear.rotation.z = side * -0.18
+		ear.material_override = _mat(Color(0.86, 0.27, 0.10))
+		creature.add_child(ear)
+		_add_sphere_part(creature, Vector3(side * 0.19, 0.39, 0.69), Vector3(0.055, 0.075, 0.035), Color(0.08, 0.07, 0.07))
+		_add_capsule_part(creature, Vector3(side * 0.43, -0.31, 0.12), Vector3(0.14, 0.28, 0.14), Color(0.83, 0.29, 0.10))
+		_add_sphere_part(creature, Vector3(side * 0.43, -0.47, 0.19), Vector3(0.17, 0.10, 0.21), Color(0.26, 0.16, 0.12))
+	_add_capsule_part(creature, Vector3(0, 0.05, -0.55), Vector3(0.16, 0.48, 0.16), Color(0.91, 0.35, 0.12))
+	_add_sphere_part(creature, Vector3(0, 0.40, -0.76), Vector3(0.25, 0.32, 0.22), Color(1.0, 0.65, 0.12))
+	_add_sphere_part(creature, Vector3(0, 0.48, -0.82), Vector3(0.15, 0.22, 0.14), Color(1.0, 0.88, 0.30))
+
 
 func _build_ui() -> void:
 	var layer := CanvasLayer.new()
@@ -272,6 +354,28 @@ func _try_capture() -> void:
 func _update_status(message: String) -> void:
 	if status_label:
 		status_label.text = message
+
+func _add_sphere_part(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> void:
+	var part := MeshInstance3D.new()
+	var mesh := SphereMesh.new()
+	mesh.radius = 1.0
+	mesh.height = 2.0
+	part.mesh = mesh
+	part.position = pos
+	part.scale = size
+	part.material_override = _mat(color)
+	parent.add_child(part)
+
+func _add_capsule_part(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> void:
+	var part := MeshInstance3D.new()
+	var mesh := CapsuleMesh.new()
+	mesh.radius = 0.5
+	mesh.height = 2.0
+	part.mesh = mesh
+	part.position = pos
+	part.scale = size
+	part.material_override = _mat(color)
+	parent.add_child(part)
 
 func _mat(color: Color) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()

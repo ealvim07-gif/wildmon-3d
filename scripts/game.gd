@@ -379,41 +379,80 @@ func _build_distant_ridges() -> void:
 		ridge.material_override = _mat([Color(0.20, 0.32, 0.26), Color(0.25, 0.37, 0.29), Color(0.29, 0.39, 0.31)][i % 3])
 		add_child(ridge)
 
+func _waterline_radius(angle: float) -> float:
+	return 1.0 + sin(angle * 2.0 + 0.45) * 0.075 + cos(angle * 3.0 - 0.8) * 0.045 + sin(angle * 5.0 + 1.7) * 0.025
+
+func _make_irregular_water_mesh(radius: float, segments: int, y_offset: float) -> ArrayMesh:
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var center := Vector3(-17.0, _terrain_height(-17.0, -12.0) + y_offset, -12.0)
+	for i in range(segments):
+		var angle_a := TAU * float(i) / float(segments)
+		var angle_b := TAU * float(i + 1) / float(segments)
+		var point_a := center + Vector3(cos(angle_a) * radius * _waterline_radius(angle_a), 0.0, sin(angle_a) * radius * _waterline_radius(angle_a))
+		var point_b := center + Vector3(cos(angle_b) * radius * _waterline_radius(angle_b), 0.0, sin(angle_b) * radius * _waterline_radius(angle_b))
+		# Ordem dos vértices voltada para cima.
+		surface.add_vertex(center)
+		surface.add_vertex(point_b)
+		surface.add_vertex(point_a)
+	surface.generate_normals()
+	return surface.commit()
+
+func _make_irregular_shore_mesh(inner_radius: float, outer_radius: float, segments: int, y_offset: float) -> ArrayMesh:
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var center := Vector3(-17.0, _terrain_height(-17.0, -12.0) + y_offset, -12.0)
+	for i in range(segments):
+		var angle_a := TAU * float(i) / float(segments)
+		var angle_b := TAU * float(i + 1) / float(segments)
+		var inner_a := center + Vector3(cos(angle_a) * inner_radius * _waterline_radius(angle_a), 0.0, sin(angle_a) * inner_radius * _waterline_radius(angle_a))
+		var inner_b := center + Vector3(cos(angle_b) * inner_radius * _waterline_radius(angle_b), 0.0, sin(angle_b) * inner_radius * _waterline_radius(angle_b))
+		var outer_a := center + Vector3(cos(angle_a) * outer_radius * _waterline_radius(angle_a), 0.0, sin(angle_a) * outer_radius * _waterline_radius(angle_a))
+		var outer_b := center + Vector3(cos(angle_b) * outer_radius * _waterline_radius(angle_b), 0.0, sin(angle_b) * outer_radius * _waterline_radius(angle_b))
+		surface.add_vertex(outer_a)
+		surface.add_vertex(inner_a)
+		surface.add_vertex(outer_b)
+		surface.add_vertex(outer_b)
+		surface.add_vertex(inner_a)
+		surface.add_vertex(inner_b)
+	surface.generate_normals()
+	return surface.commit()
+
 func _build_waterhole() -> void:
+	# Margem e lâmina d'água são malhas poligonais irregulares, sem cilindros.
 	var shore := MeshInstance3D.new()
-	var shore_mesh := CylinderMesh.new()
-	shore_mesh.top_radius = 4.8
-	shore_mesh.bottom_radius = 5.2
-	shore_mesh.height = 0.18
-	shore.mesh = shore_mesh
-	shore.position = Vector3(-17.0, _terrain_height(-17.0, -12.0) + 0.05, -12.0)
-	shore.material_override = _mat(Color(0.52, 0.43, 0.29))
+	shore.mesh = _make_irregular_shore_mesh(3.72, 5.15, 40, 0.045)
+	shore.material_override = _mat(Color(0.49, 0.40, 0.27))
 	add_child(shore)
+
 	var water := MeshInstance3D.new()
-	var water_mesh := CylinderMesh.new()
-	water_mesh.top_radius = 4.0
-	water_mesh.bottom_radius = 4.0
-	water_mesh.height = 0.035
-	water.mesh = water_mesh
-	water.position = shore.position + Vector3(0.0, 0.10, 0.0)
+	water.mesh = _make_irregular_water_mesh(3.82, 40, 0.105)
 	var water_mat := StandardMaterial3D.new()
-	water_mat.albedo_color = Color(0.12, 0.39, 0.49, 0.88)
-	water_mat.roughness = 0.24
-	water_mat.metallic = 0.04
+	water_mat.albedo_color = Color(0.12, 0.39, 0.49, 0.92)
+	water_mat.roughness = 0.28
+	water_mat.metallic = 0.025
 	water_mat.disable_receive_shadows = true
 	water_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	water_mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
 	water.material_override = water_mat
 	add_child(water)
-	for i in range(18):
-		var angle := TAU * float(i) / 18.0
-		_add_rock(Vector3(-17.0 + cos(angle) * 4.45, shore.position.y + 0.08, -12.0 + sin(angle) * 4.45), i + 90)
-	# Juncos em pequenos grupos na margem, sem formar um anel artificial.
-	for i in [1, 2, 5, 8, 11, 14, 16]:
-		var angle := TAU * float(i) / 18.0
-		var radius := 4.15 + float(i % 3) * 0.32
-		var reed_x := -17.0 + cos(angle) * radius
-		var reed_z := -12.0 + sin(angle) * radius
+
+	# Pedras em grupos assimétricos, concentradas em trechos da margem.
+	var rock_angles := [0.12, 0.39, 0.57, 1.42, 1.68, 2.73, 3.02, 3.31, 4.18, 4.52, 5.31, 5.72]
+	for i in range(rock_angles.size()):
+		var angle: float = rock_angles[i]
+		var radius := 4.45 + float((i * 7) % 5) * 0.19
+		var rock_x := -17.0 + cos(angle) * radius * _waterline_radius(angle)
+		var rock_z := -12.0 + sin(angle) * radius * _waterline_radius(angle)
+		_add_rock(Vector3(rock_x, _terrain_height(rock_x, rock_z), rock_z), i + 90)
+
+	# Juncos em três manchas úmidas, sem formar um anel artificial.
+	var reed_angles := [0.72, 0.91, 1.08, 2.12, 2.31, 2.48, 4.82, 5.02, 5.19]
+	for i in range(reed_angles.size()):
+		var angle: float = reed_angles[i]
+		var radius := 4.18 + float(i % 3) * 0.20
+		var reed_x := -17.0 + cos(angle) * radius * _waterline_radius(angle)
+		var reed_z := -12.0 + sin(angle) * radius * _waterline_radius(angle)
 		_add_reed(Vector3(reed_x, _terrain_height(reed_x, reed_z) + 0.03, reed_z), 410 + i)
 
 func _build_terrain() -> void:

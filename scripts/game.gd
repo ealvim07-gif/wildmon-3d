@@ -10,6 +10,8 @@ var player_arm_parts: Array[MeshInstance3D] = []
 var player_leg_parts: Array[MeshInstance3D] = []
 var camera: Camera3D
 var creature: Node3D
+var creature_tail: Node3D
+var creature_leg_parts: Array[MeshInstance3D] = []
 var creature_home := Vector3(2.5, 0.72, -9.0)
 var creature_captured := false
 var creature_in_range := false
@@ -73,6 +75,13 @@ func _process(delta: float) -> void:
 		creature.rotate_y(delta * 0.55)
 		var creature_clock := Time.get_ticks_msec() * 0.00045
 		creature.position = creature_home + Vector3(sin(creature_clock) * 0.55, sin(creature_clock * 4.0) * 0.10, cos(creature_clock * 0.8) * 0.32)
+		if creature_tail:
+			creature_tail.rotation.y = sin(creature_clock * 3.2) * 0.24
+			creature_tail.rotation.x = cos(creature_clock * 2.4) * 0.10
+		var creature_step := sin(creature_clock * 5.0) * 0.32
+		for leg_index in range(creature_leg_parts.size()):
+			var leg_target := creature_step * (1.0 if leg_index % 2 == 0 else -1.0)
+			creature_leg_parts[leg_index].rotation.x = lerpf(creature_leg_parts[leg_index].rotation.x, leg_target, minf(delta * 5.0, 1.0))
 		var now_in_range := player.global_position.distance_to(creature.global_position) < 3.0
 		if now_in_range != creature_in_range:
 			creature_in_range = now_in_range
@@ -847,13 +856,17 @@ func _build_creature() -> void:
 		_add_box(creature, Vector3(side * 0.23, 0.64, 0.43), Vector3(0.075, 0.22, 0.035), Color(1.0, 0.58, 0.25), false)
 		_add_faceted_part(creature, Vector3(side * 0.16, 0.39, 0.64), Vector3(0.065, 0.085, 0.045), Color(0.98, 0.91, 0.68))
 		_add_faceted_part(creature, Vector3(side * 0.16, 0.39, 0.675), Vector3(0.027, 0.047, 0.022), Color(0.08, 0.06, 0.05))
-		_add_capsule_part(creature, Vector3(side * 0.40, -0.28, 0.12), Vector3(0.12, 0.26, 0.12), Color(0.72, 0.17, 0.045))
+		var leg := _add_capsule_part(creature, Vector3(side * 0.40, -0.28, 0.12), Vector3(0.12, 0.26, 0.12), Color(0.72, 0.17, 0.045))
+		creature_leg_parts.append(leg)
 		_add_box(creature, Vector3(side * 0.40, -0.44, 0.18), Vector3(0.19, 0.12, 0.23), Color(0.24, 0.10, 0.055), false)
-	# Cauda em três camadas cônicas para parecer uma chama, não uma esfera.
-	_add_cone_part(creature, Vector3(0, 0.12, -0.48), 0.29, 0.82, Color(0.82, 0.19, 0.025), -PI * 0.5)
-	_add_cone_part(creature, Vector3(0, 0.29, -0.72), 0.20, 0.62, Color(1.0, 0.43, 0.025), -PI * 0.5)
-	_add_cone_part(creature, Vector3(0, 0.46, -0.89), 0.105, 0.38, Color(1.0, 0.86, 0.30), -PI * 0.5)
-	_add_faceted_part(creature, Vector3(0, 0.62, -0.99), Vector3(0.055, 0.12, 0.06), Color(1.0, 0.97, 0.68))
+	# Cauda articulada em três camadas cônicas, com balanço suave.
+	creature_tail = Node3D.new()
+	creature_tail.position = Vector3(0, 0.12, -0.48)
+	creature.add_child(creature_tail)
+	_add_cone_part(creature_tail, Vector3(0, 0.0, 0.0), 0.29, 0.82, Color(0.82, 0.19, 0.025), -PI * 0.5)
+	_add_cone_part(creature_tail, Vector3(0, 0.17, -0.24), 0.20, 0.62, Color(1.0, 0.43, 0.025), -PI * 0.5)
+	_add_cone_part(creature_tail, Vector3(0, 0.34, -0.41), 0.105, 0.38, Color(1.0, 0.86, 0.30), -PI * 0.5)
+	_add_faceted_part(creature_tail, Vector3(0, 0.50, -0.51), Vector3(0.055, 0.12, 0.06), Color(1.0, 0.97, 0.68))
 
 func _build_ui() -> void:
 	var layer := CanvasLayer.new()

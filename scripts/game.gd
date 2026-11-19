@@ -858,8 +858,8 @@ func _build_creature() -> void:
 		flame_color = Color(0.91, 0.42, 0.70)
 		tip_color = Color(1.0, 0.78, 0.90)
 	_update_variant_label(variant)
-	_add_faceted_part(creature, Vector3(0, 0.00, 0), Vector3(0.68, 0.40, 0.48), body_color)
-	_add_faceted_part(creature, Vector3(0, 0.29, 0.35), Vector3(0.38, 0.37, 0.34), highlight_color)
+	_add_prism_part(creature, Vector3(0, 0.00, 0), Vector3(0.78, 0.43, 0.56), body_color)
+	_add_prism_part(creature, Vector3(0, 0.29, 0.35), Vector3(0.43, 0.39, 0.40), highlight_color)
 	var muzzle := MeshInstance3D.new()
 	var muzzle_mesh := PrismMesh.new()
 	muzzle_mesh.size = Vector3(0.32, 0.20, 0.40)
@@ -1109,6 +1109,16 @@ func _add_faceted_part(parent: Node3D, pos: Vector3, size: Vector3, color: Color
 	part.mesh = mesh
 	part.position = pos
 	part.scale = size
+	part.material_override = _mat(color)
+	parent.add_child(part)
+
+func _add_prism_part(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> void:
+	# Volumes triangulares dão uma silhueta mais angular ao corpo e à cabeça.
+	var part := MeshInstance3D.new()
+	var mesh := PrismMesh.new()
+	mesh.size = size
+	part.mesh = mesh
+	part.position = pos
 	part.material_override = _mat(color)
 	parent.add_child(part)
 

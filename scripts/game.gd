@@ -14,6 +14,8 @@ var creature_tail: Node3D
 var creature_leg_parts: Array[MeshInstance3D] = []
 var creature_home := Vector3(2.5, 0.72, -9.0)
 var creature_captured := false
+var captured_count := 0
+var collection_label: Label
 var creature_in_range := false
 var look_yaw := 0.0
 var target_look_yaw := 0.0
@@ -904,6 +906,12 @@ func _build_ui() -> void:
 	status_label.add_theme_color_override("font_color", Color(0.72, 0.84, 0.73))
 	status_label.text = "Explore o vale e encontre uma criatura!"
 	vbox.add_child(status_label)
+	collection_label = Label.new()
+	collection_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	collection_label.add_theme_font_size_override("font_size", 12)
+	collection_label.add_theme_color_override("font_color", Color(1.0, 0.78, 0.42))
+	collection_label.text = "BRASAFOFOS CAPTURADOS: 0"
+	vbox.add_child(collection_label)
 
 	var controls := HBoxContainer.new()
 	controls.anchor_left = 0.025
@@ -993,6 +1001,9 @@ func _try_capture() -> void:
 		_update_status("Chegue mais perto da criatura para capturá-la.")
 		return
 	creature_captured = true
+	captured_count += 1
+	if collection_label:
+		collection_label.text = "BRASAFOFOS CAPTURADOS: " + str(captured_count)
 	var captured_creature := creature
 	capture_button.disabled = true
 	capture_button.text = "CAPTURADO!"
@@ -1000,8 +1011,23 @@ func _try_capture() -> void:
 	capture_tween.set_parallel(true)
 	capture_tween.tween_property(captured_creature, "scale", Vector3.ZERO, 0.42).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
 	capture_tween.tween_property(captured_creature, "position:y", captured_creature.position.y + 1.0, 0.42).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-	capture_tween.chain().tween_callback(func(): captured_creature.queue_free())
-	_update_status("Captura realizada! Você capturou um Brasafofo.")
+	capture_tween.chain().tween_callback(func():
+		captured_creature.queue_free()
+		_schedule_creature_respawn()
+	)
+	_update_status("Captura realizada! Brasafofo adicionado à coleção.")
+
+func _schedule_creature_respawn() -> void:
+	await get_tree().create_timer(3.5).timeout
+	if not is_inside_tree():
+		return
+	creature_captured = false
+	creature_in_range = false
+	_build_creature()
+	if capture_button:
+		capture_button.disabled = false
+		capture_button.text = "CAPTURAR"
+	_update_status("Outra criatura apareceu no vale! Continue explorando.")
 
 func _update_status(message: String) -> void:
 	if status_label:

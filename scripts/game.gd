@@ -12,6 +12,7 @@ var camera: Camera3D
 var creature: Node3D
 var creature_tail: Node3D
 var creature_leg_parts: Array[MeshInstance3D] = []
+var creature_ear_parts: Array[MeshInstance3D] = []
 var creature_home := Vector3(2.5, 0.72, -9.0)
 var creature_captured := false
 var captured_count := 0
@@ -86,6 +87,10 @@ func _process(delta: float) -> void:
 		for leg_index in range(creature_leg_parts.size()):
 			var leg_target := creature_step * (1.0 if leg_index % 2 == 0 else -1.0)
 			creature_leg_parts[leg_index].rotation.x = lerpf(creature_leg_parts[leg_index].rotation.x, leg_target, minf(delta * 5.0, 1.0))
+		for ear_index in range(creature_ear_parts.size()):
+			var ear_side := -1.0 if ear_index == 0 else 1.0
+			var ear_idle := sin(creature_clock * 2.1 + float(ear_index) * 0.8) * 0.055
+			creature_ear_parts[ear_index].rotation.z = ear_side * -0.20 + ear_idle
 		var now_in_range := player.global_position.distance_to(creature.global_position) < 3.0
 		if now_in_range != creature_in_range:
 			creature_in_range = now_in_range
@@ -873,6 +878,7 @@ func _build_creature() -> void:
 		ear.rotation.z = side * -0.20
 		ear.material_override = _mat(body_color)
 		creature.add_child(ear)
+		creature_ear_parts.append(ear)
 		_add_box(creature, Vector3(side * 0.23, 0.64, 0.43), Vector3(0.075, 0.22, 0.035), Color(1.0, 0.58, 0.25), false)
 		_add_faceted_part(creature, Vector3(side * 0.16, 0.39, 0.64), Vector3(0.065, 0.085, 0.045), Color(0.98, 0.91, 0.68))
 		_add_faceted_part(creature, Vector3(side * 0.16, 0.39, 0.675), Vector3(0.027, 0.047, 0.022), Color(0.08, 0.06, 0.05))

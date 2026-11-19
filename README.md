@@ -13,6 +13,8 @@ Esta atualização reúne uma reformulação visual ampla do protótipo:
 - Primeira integração dos modelos 3D texturizados Quaternius Stylized Nature MegaKit (Standard, CC0), com árvores, pinheiros, arbustos, samambaias, pedras e vegetação.
 - Personagem explorador com roupas, mochila, detalhes e movimento sutil ao caminhar.
 - Brasafofo redesenhado com focinho, barriga clara, orelhas internas, olhos e cauda flamejante.
+- Segunda espécie original, Pedralume: criatura rochosa de quatro patas, corpo facetado e cristais dorsais; alterna com o Brasafofo durante os encontros.
+- Coleção separada por espécie, com contadores persistentes para Brasafofo e Pedralume.
 - Criatura com movimento de espera e deslocamento suave pelo ambiente.
 - Interface mobile redesenhada com painel translúcido e botões estilizados.
 

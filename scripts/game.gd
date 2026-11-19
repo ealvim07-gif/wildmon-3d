@@ -835,9 +835,24 @@ func _build_creature() -> void:
 	creature = Node3D.new()
 	creature.position = creature_home
 	add_child(creature)
-	# Brasafofo: raposa de fogo com corpo compacto, focinho em cunha e cauda flamejante.
-	_add_faceted_part(creature, Vector3(0, 0.00, 0), Vector3(0.68, 0.40, 0.48), Color(0.72, 0.17, 0.045))
-	_add_faceted_part(creature, Vector3(0, 0.29, 0.35), Vector3(0.38, 0.37, 0.34), Color(0.91, 0.29, 0.055))
+	# Variações visuais alternadas para a coleção.
+	var variant := captured_count % 3
+	var body_color := body_color
+	var highlight_color := highlight_color
+	var flame_color := flame_color
+	var tip_color := tip_color
+	if variant == 1:
+		body_color = Color(0.20, 0.39, 0.68)
+		highlight_color = Color(0.30, 0.61, 0.88)
+		flame_color = Color(0.35, 0.78, 1.0)
+		tip_color = Color(0.80, 0.95, 1.0)
+	elif variant == 2:
+		body_color = Color(0.43, 0.25, 0.62)
+		highlight_color = Color(0.67, 0.39, 0.78)
+		flame_color = Color(0.91, 0.42, 0.70)
+		tip_color = Color(1.0, 0.78, 0.90)
+	_add_faceted_part(creature, Vector3(0, 0.00, 0), Vector3(0.68, 0.40, 0.48), body_color)
+	_add_faceted_part(creature, Vector3(0, 0.29, 0.35), Vector3(0.38, 0.37, 0.34), highlight_color)
 	var muzzle := MeshInstance3D.new()
 	var muzzle_mesh := PrismMesh.new()
 	muzzle_mesh.size = Vector3(0.32, 0.20, 0.40)
@@ -854,21 +869,21 @@ func _build_creature() -> void:
 		ear.mesh = ear_mesh
 		ear.position = Vector3(side * 0.23, 0.64, 0.33)
 		ear.rotation.z = side * -0.20
-		ear.material_override = _mat(Color(0.70, 0.15, 0.035))
+		ear.material_override = _mat(body_color)
 		creature.add_child(ear)
 		_add_box(creature, Vector3(side * 0.23, 0.64, 0.43), Vector3(0.075, 0.22, 0.035), Color(1.0, 0.58, 0.25), false)
 		_add_faceted_part(creature, Vector3(side * 0.16, 0.39, 0.64), Vector3(0.065, 0.085, 0.045), Color(0.98, 0.91, 0.68))
 		_add_faceted_part(creature, Vector3(side * 0.16, 0.39, 0.675), Vector3(0.027, 0.047, 0.022), Color(0.08, 0.06, 0.05))
-		var leg := _add_capsule_part(creature, Vector3(side * 0.40, -0.28, 0.12), Vector3(0.12, 0.26, 0.12), Color(0.72, 0.17, 0.045))
+		var leg := _add_capsule_part(creature, Vector3(side * 0.40, -0.28, 0.12), Vector3(0.12, 0.26, 0.12), body_color)
 		creature_leg_parts.append(leg)
 		_add_box(creature, Vector3(side * 0.40, -0.44, 0.18), Vector3(0.19, 0.12, 0.23), Color(0.24, 0.10, 0.055), false)
 	# Cauda articulada em três camadas cônicas, com balanço suave.
 	creature_tail = Node3D.new()
 	creature_tail.position = Vector3(0, 0.12, -0.48)
 	creature.add_child(creature_tail)
-	_add_cone_part(creature_tail, Vector3(0, 0.0, 0.0), 0.29, 0.82, Color(0.82, 0.19, 0.025), -PI * 0.5)
-	_add_cone_part(creature_tail, Vector3(0, 0.17, -0.24), 0.20, 0.62, Color(1.0, 0.43, 0.025), -PI * 0.5)
-	_add_cone_part(creature_tail, Vector3(0, 0.34, -0.41), 0.105, 0.38, Color(1.0, 0.86, 0.30), -PI * 0.5)
+	_add_cone_part(creature_tail, Vector3(0, 0.0, 0.0), 0.29, 0.82, body_color, -PI * 0.5)
+	_add_cone_part(creature_tail, Vector3(0, 0.17, -0.24), 0.20, 0.62, flame_color, -PI * 0.5)
+	_add_cone_part(creature_tail, Vector3(0, 0.34, -0.41), 0.105, 0.38, tip_color, -PI * 0.5)
 	_add_faceted_part(creature_tail, Vector3(0, 0.50, -0.51), Vector3(0.055, 0.12, 0.06), Color(1.0, 0.97, 0.68))
 
 func _build_ui() -> void:

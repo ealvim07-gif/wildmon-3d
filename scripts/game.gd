@@ -255,8 +255,8 @@ func _build_world() -> void:
 	env.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
 	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.20, 0.48, 0.82)
-	sky_mat.sky_horizon_color = Color(0.79, 0.89, 0.96)
+	sky_mat.sky_top_color = Color(0.31, 0.57, 0.88)
+	sky_mat.sky_horizon_color = Color(0.84, 0.92, 0.98)
 	sky_mat.ground_bottom_color = Color(0.28, 0.34, 0.27)
 	sky_mat.ground_horizon_color = Color(0.62, 0.70, 0.56)
 	sky_mat.sun_angle_max = 24.0
@@ -265,7 +265,7 @@ func _build_world() -> void:
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ambient_light_color = Color(0.78, 0.84, 0.91)
-	env.ambient_light_energy = 1.08
+	env.ambient_light_energy = 1.18
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.tonemap_exposure = 1.30
 	env.fog_enabled = true
@@ -306,7 +306,7 @@ func _build_world() -> void:
 	rng.seed = 81027
 	# Bosques em manchas irregulares, com árvores isoladas entre os grupos.
 	var grove_centers := [Vector2(-31.0, -29.0), Vector2(31.0, -29.0), Vector2(-34.0, 34.0), Vector2(34.0, 34.0)]
-	for i in range(68):
+	for i in range(100):
 		var px: float
 		var pz: float
 		if i % 7 == 0:
@@ -321,19 +321,19 @@ func _build_world() -> void:
 		if Vector2(px + 17.0, pz + 12.0).length() < 8.0:
 			continue
 		_add_tree(Vector3(px, _terrain_height(px, pz), pz), i)
-	for i in range(72):
+	for i in range(110):
 		var px := rng.randf_range(-66.0, 66.0)
 		var pz := rng.randf_range(-66.0, 66.0)
 		if absf(px) < 7.0 and pz < 12.0 and pz > -31.0:
 			continue
 		_add_plant(Vector3(px, _terrain_height(px, pz), pz), i)
-	for i in range(36):
+	for i in range(30):
 		var px := rng.randf_range(-66.0, 66.0)
 		var pz := rng.randf_range(-66.0, 66.0)
 		if absf(px) < 9.0 and pz < 12.0 and pz > -30.0:
 			continue
 		_add_rock(Vector3(px, _terrain_height(px, pz), pz), i)
-	for i in range(84):
+	for i in range(120):
 		var px := rng.randf_range(-67.0, 67.0)
 		var pz := rng.randf_range(-67.0, 67.0)
 		if absf(px) < 8.0 and pz < 12.0 and pz > -31.0:
@@ -406,7 +406,7 @@ func _add_biome_floor_patch(center: Vector2, radius_x: float, radius_z: float, b
 	var ring_count := 5
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var grass_color := Color(0.19, 0.30, 0.13)
+	var grass_color := Color(0.27, 0.37, 0.19)
 	var center_pos := Vector3(center.x, _terrain_height(center.x, center.y) + 0.065, center.y)
 	var center_color := base_color.lerp(grass_color, 0.04)
 	for i in range(segments):
@@ -784,6 +784,18 @@ func _build_terrain() -> void:
 	terrain_material.vertex_color_use_as_albedo = true
 	terrain_material.roughness = 1.0
 	terrain_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	# Ruído fino repetido no chão quebra a aparência lisa sem exigir shaders pesados.
+	var ground_image := Image.create(128, 128, false, Image.FORMAT_RGBA8)
+	var ground_noise := FastNoiseLite.new()
+	ground_noise.seed = 7821
+	ground_noise.frequency = 0.095
+	for tex_y in range(128):
+		for tex_x in range(128):
+			var grain := 0.92 + ground_noise.get_noise_2d(float(tex_x), float(tex_y)) * 0.075
+			ground_image.set_pixel(tex_x, tex_y, Color(grain * 0.96, grain, grain * 0.90, 1.0))
+	ground_image.generate_mipmaps()
+	terrain_material.albedo_texture = ImageTexture.create_from_image(ground_image)
+	terrain_material.uv1_scale = Vector3(0.18, 0.18, 1.0)
 	terrain_mesh.material_override = terrain_material
 	add_child(terrain_mesh)
 
@@ -817,8 +829,8 @@ func _terrain_vertex_color(x: float, z: float, height: float, noise: FastNoiseLi
 	var lowland := Color(0.31, 0.43, 0.23)
 	var hillside := Color(0.39, 0.47, 0.27)
 	var rocky := Color(0.47, 0.45, 0.38)
-	var color := lowland.lerp(hillside, clampf((height - 0.25) / 1.35, 0.0, 1.0))
-	color = color.lerp(rocky, clampf((height - 1.8) / 1.0, 0.0, 0.72))
+	var color := lowland.lerp(hillside, smoothstep(0.0, 1.8, height))
+	color = color.lerp(rocky, smoothstep(1.7, 3.4, height) * 0.72)
 	color += Color(variation, variation, variation * 0.72, 0.0)
 	return color
 

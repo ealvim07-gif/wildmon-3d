@@ -16,6 +16,8 @@ var creature_ear_parts: Array[MeshInstance3D] = []
 var creature_home := Vector3(2.5, 0.72, -9.0)
 var creature_captured := false
 var captured_count := 0
+var pedralume_count := 0
+var creature_species := 0
 var collection_label: Label
 var creature_in_range := false
 var look_yaw := 0.0
@@ -838,6 +840,17 @@ func _build_player() -> void:
 	camera.look_at(Vector3(0, 1, 0))
 
 func _build_creature() -> void:
+	# Alterna espécies para que a coleção tenha criaturas com silhuetas realmente diferentes.
+	creature_species = (captured_count + pedralume_count) % 2
+	creature_tail = null
+	creature_leg_parts.clear()
+	creature_ear_parts.clear()
+	if creature_species == 0:
+		_build_brasafofo()
+	else:
+		_build_pedralume()
+
+func _build_brasafofo() -> void:
 	creature = Node3D.new()
 	creature.position = creature_home
 	add_child(creature)
@@ -886,7 +899,6 @@ func _build_creature() -> void:
 		var leg := _add_limb_part(creature, Vector3(side * 0.40, -0.28, 0.12), Vector3(0.12, 0.26, 0.12), body_color)
 		creature_leg_parts.append(leg)
 		_add_box(creature, Vector3(side * 0.40, -0.44, 0.18), Vector3(0.19, 0.12, 0.23), Color(0.24, 0.10, 0.055), false)
-	# Cauda articulada em três camadas cônicas, com balanço suave.
 	creature_tail = Node3D.new()
 	creature_tail.position = Vector3(0, 0.12, -0.48)
 	creature.add_child(creature_tail)
@@ -894,6 +906,35 @@ func _build_creature() -> void:
 	_add_cone_part(creature_tail, Vector3(0, 0.17, -0.24), 0.20, 0.62, flame_color, -PI * 0.5)
 	_add_cone_part(creature_tail, Vector3(0, 0.34, -0.41), 0.105, 0.38, tip_color, -PI * 0.5)
 	_add_faceted_part(creature_tail, Vector3(0, 0.50, -0.51), Vector3(0.055, 0.12, 0.06), Color(1.0, 0.97, 0.68))
+
+func _build_pedralume() -> void:
+	creature = Node3D.new()
+	creature.position = creature_home
+	add_child(creature)
+	if status_label:
+		_update_status("Um Pedralume surgiu entre as pedras!")
+	if variant_label:
+		variant_label.text = "NOVA ESPÉCIE: PEDRALUME • ROCHA VIVA"
+	var stone_color := Color(0.30, 0.39, 0.37)
+	var stone_light := Color(0.48, 0.56, 0.49)
+	# Corpo baixo, largo e facetado; quatro patas dão uma silhueta própria.
+	_add_prism_part(creature, Vector3(0, 0.02, 0), Vector3(0.92, 0.66, 0.78), stone_color)
+	_add_prism_part(creature, Vector3(0, 0.23, 0.34), Vector3(0.52, 0.42, 0.42), stone_light)
+	_add_prism_part(creature, Vector3(0, 0.16, 0.58), Vector3(0.28, 0.16, 0.20), Color(0.22, 0.29, 0.27))
+	for side in [-1.0, 1.0]:
+		_add_faceted_part(creature, Vector3(side * 0.19, 0.30, 0.57), Vector3(0.065, 0.075, 0.035), Color(0.95, 0.83, 0.48))
+		_add_faceted_part(creature, Vector3(side * 0.19, 0.30, 0.60), Vector3(0.026, 0.045, 0.018), Color(0.06, 0.08, 0.07))
+		var front_leg := _add_limb_part(creature, Vector3(side * 0.34, -0.28, 0.28), Vector3(0.16, 0.28, 0.16), stone_color)
+		var rear_leg := _add_limb_part(creature, Vector3(side * 0.34, -0.28, -0.28), Vector3(0.16, 0.28, 0.16), stone_color)
+		creature_leg_parts.append(front_leg)
+		creature_leg_parts.append(rear_leg)
+		_add_prism_part(creature, Vector3(side * 0.34, -0.43, 0.31), Vector3(0.22, 0.11, 0.23), stone_light)
+		_add_prism_part(creature, Vector3(side * 0.34, -0.43, -0.25), Vector3(0.22, 0.11, 0.23), stone_light)
+	# Cristais dorsais assimétricos são a assinatura visual do Pedralume.
+	_add_prism_part(creature, Vector3(-0.23, 0.48, -0.12), Vector3(0.20, 0.42, 0.18), Color(0.20, 0.78, 0.72))
+	_add_prism_part(creature, Vector3(0.02, 0.54, -0.08), Vector3(0.22, 0.56, 0.19), Color(0.32, 0.91, 0.78))
+	_add_prism_part(creature, Vector3(0.25, 0.45, -0.15), Vector3(0.18, 0.36, 0.16), Color(0.13, 0.61, 0.61))
+	_add_prism_part(creature, Vector3(-0.02, 0.31, -0.43), Vector3(0.28, 0.24, 0.24), stone_light)
 
 func _build_ui() -> void:
 	var layer := CanvasLayer.new()
@@ -935,7 +976,7 @@ func _build_ui() -> void:
 	collection_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	collection_label.add_theme_font_size_override("font_size", 12)
 	collection_label.add_theme_color_override("font_color", Color(1.0, 0.78, 0.42))
-	collection_label.text = "BRASAFOFOS CAPTURADOS: 0"
+	collection_label.text = "COLEÇÃO: 0 BRASAFOFO • 0 PEDRALUME"
 	vbox.add_child(collection_label)
 	variant_label = Label.new()
 	variant_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1022,7 +1063,7 @@ func _try_capture() -> void:
 	if player == null:
 		return
 	if creature_captured:
-		_update_status("Você já capturou o Brasafofo! Beta concluída.")
+		_update_status("Você já capturou esta criatura!")
 		return
 	if creature == null or not is_instance_valid(creature):
 		_update_status("Não há criatura disponível para capturar.")
@@ -1031,10 +1072,13 @@ func _try_capture() -> void:
 		_update_status("Chegue mais perto da criatura para capturá-la.")
 		return
 	creature_captured = true
-	captured_count += 1
+	if creature_species == 0:
+		captured_count += 1
+	else:
+		pedralume_count += 1
 	_save_collection()
 	if collection_label:
-		collection_label.text = "BRASAFOFOS CAPTURADOS: " + str(captured_count)
+		collection_label.text = "COLEÇÃO: " + str(captured_count) + " BRASAFOFO • " + str(pedralume_count) + " PEDRALUME"
 	var captured_creature := creature
 	capture_button.disabled = true
 	capture_button.text = "CAPTURADO!"
@@ -1086,12 +1130,14 @@ func _load_collection() -> void:
 	var load_error := save_data.load("user://wildmon_save.cfg")
 	if load_error == OK:
 		captured_count = int(save_data.get_value("collection", "brasafofo_count", 0))
+		pedralume_count = int(save_data.get_value("collection", "pedralume_count", 0))
 	if collection_label:
-		collection_label.text = "BRASAFOFOS CAPTURADOS: " + str(captured_count)
+		collection_label.text = "COLEÇÃO: " + str(captured_count) + " BRASAFOFO • " + str(pedralume_count) + " PEDRALUME"
 
 func _save_collection() -> void:
 	var save_data := ConfigFile.new()
 	save_data.set_value("collection", "brasafofo_count", captured_count)
+	save_data.set_value("collection", "pedralume_count", pedralume_count)
 	var save_error := save_data.save("user://wildmon_save.cfg")
 	if save_error != OK:
 		push_warning("Não foi possível salvar a coleção: " + str(save_error))

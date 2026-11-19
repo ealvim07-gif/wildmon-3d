@@ -1,16 +1,16 @@
-# Wildmon 3D — Beta 1.0
+# Wildmon 3D — desenvolvimento da Beta 2.0
 
 Wildmon 3D é um jogo original de exploração e captura de criaturas em terceira pessoa, desenvolvido no Godot 4.4.1 com foco em Android.
 
-## Direção da Beta 1.0
+## Base atual e direção da Beta 2.0
 
 Esta atualização reúne uma reformulação visual ampla do protótipo:
 
 - Terreno ondulado com material procedural, variação de cor e detalhe em diferentes escalas.
 - Trilha sinuosa integrada ao relevo.
-- Colinas distantes, neblina atmosférica e iluminação de fim de tarde.
+- Relevo com cristas alongadas, silhuetas facetadas ao horizonte, neblina atmosférica e iluminação de fim de tarde.
 - Clareira com lago, margem de terra e pedras.
-- Mais árvores, copas em camadas, galhos, plantas, pedras e vegetação rasteira.
+- Primeira integração dos modelos 3D texturizados Quaternius Stylized Nature MegaKit (Standard, CC0), com árvores, pinheiros, arbustos, samambaias, pedras e vegetação.
 - Personagem explorador com roupas, mochila, detalhes e movimento sutil ao caminhar.
 - Brasafofo redesenhado com focinho, barriga clara, orelhas internas, olhos e cauda flamejante.
 - Criatura com movimento de espera e deslocamento suave pelo ambiente.
@@ -19,7 +19,7 @@ Esta atualização reúne uma reformulação visual ampla do protótipo:
 ## Controles
 
 - Use os botões direcionais para caminhar.
-- Arraste o lado direito da tela para girar a câmera.
+- Arraste o lado direito da tela para girar a câmera horizontalmente e ajustar a inclinação vertical.
 - Aproxime-se do Brasafofo e toque em **CAPTURAR**.
 
 ## Tecnologia e compatibilidade
@@ -30,7 +30,7 @@ Esta atualização reúne uma reformulação visual ampla do protótipo:
 - Exportação Android ARM64
 - GitHub Actions para validação e compilação do APK
 
-O projeto prioriza desempenho em aparelhos Android intermediários. Os modelos e ambientes desta fase são construídos proceduralmente; a próxima evolução visual poderá incorporar modelos 3D externos otimizados e animações completas.
+O projeto prioriza desempenho em aparelhos Android intermediários. Os modelos de natureza são obtidos automaticamente pelo script `scripts/fetch_world_assets.sh` a partir do espelho público do pacote Quaternius. Os arquivos são licenciados em CC0 1.0 e são baixados durante a compilação; não é necessário armazenar os 16 MB de modelos e texturas no repositório. A compatibilidade do Terrain3D com o renderizador mobile continua em avaliação antes de decidir se será adotado no mapa final.
 
 ## Estrutura
 
@@ -38,7 +38,8 @@ O projeto prioriza desempenho em aparelhos Android intermediários. Os modelos e
 | --- | --- |
 | `project.godot` | Configurações gerais do jogo. |
 | `scenes/main.tscn` | Cena principal. |
-| `scripts/game.gd` | Ambiente, personagem, criatura, controles e captura. |
+| `scripts/game.gd` | Ambiente, modelos de natureza, personagem, criatura, controles e captura. |
+| `scripts/fetch_world_assets.sh` | Baixa os modelos e texturas CC0 usados no cenário. |
 | `export_presets.cfg` | Configuração de exportação Android. |
 | `.github/workflows/android-apk.yml` | Validação e compilação automática do APK. |
 

@@ -193,6 +193,61 @@ func _build_world() -> void:
 		_add_grass_tuft(Vector3(px, _terrain_height(px, pz), pz), i)
 
 	_build_biome_details(rng)
+	_build_biome_ground_cover(rng)
+
+func _build_biome_ground_cover(rng: RandomNumberGenerator) -> void:
+	# Sub-bosque em manchas: vegetação baixa acompanha as copas, sem cobrir tudo.
+	var forest_centers := [Vector2(-43.0, -39.0), Vector2(43.0, -37.0), Vector2(-46.0, 39.0), Vector2(45.0, 40.0)]
+	for center_index in range(forest_centers.size()):
+		var center: Vector2 = forest_centers[center_index]
+		for i in range(12):
+			var angle := rng.randf_range(0.0, TAU)
+			var radius := sqrt(rng.randf()) * 11.0
+			var px := center.x + cos(angle) * radius
+			var pz := center.y + sin(angle) * radius * 0.78
+			if absf(px) < 10.0 and pz < 12.0 and pz > -31.0:
+				continue
+			var pos := Vector3(px, _terrain_height(px, pz), pz)
+			if i % 3 == 0:
+				_add_fern(pos, 900 + center_index * 19 + i)
+			else:
+				_add_plant(pos, 940 + center_index * 19 + i)
+			if i % 2 == 0:
+				_add_grass_tuft(pos + Vector3(0.55, 0.0, -0.25), 1020 + center_index * 19 + i)
+
+	# Flores em pequenos agrupamentos nas clareiras, deixando o centro mais aberto.
+	var flower_centers := [Vector2(-37.0, 8.0), Vector2(35.0, 28.0)]
+	for center_index in range(flower_centers.size()):
+		var center: Vector2 = flower_centers[center_index]
+		for i in range(14):
+			var angle := rng.randf_range(0.0, TAU)
+			var radius := rng.randf_range(3.0, 8.0)
+			var px := center.x + cos(angle) * radius
+			var pz := center.y + sin(angle) * radius * 0.68
+			_add_meadow_flower(Vector3(px, _terrain_height(px, pz), pz), 1100 + center_index * 17 + i)
+
+	# Vegetação mais rala nas bordas dos afloramentos, com rocha exposta dominante.
+	var rocky_centers := [Vector2(48.0, 4.0), Vector2(-48.0, -5.0), Vector2(8.0, 49.0)]
+	for center_index in range(rocky_centers.size()):
+		var center: Vector2 = rocky_centers[center_index]
+		for i in range(7):
+			var angle := rng.randf_range(0.0, TAU)
+			var radius := rng.randf_range(7.0, 11.0)
+			var px := center.x + cos(angle) * radius
+			var pz := center.y + sin(angle) * radius * 0.8
+			_add_grass_tuft(Vector3(px, _terrain_height(px, pz), pz), 1200 + center_index * 11 + i)
+
+func _add_meadow_flower(pos: Vector3, seed: int) -> void:
+	var flower_scene := _get_nature_scene(["Flower_3_Group", "Clover_1"], seed)
+	if flower_scene:
+		var flowers := flower_scene.instantiate() as Node3D
+		add_child(flowers)
+		flowers.position = pos
+		var scale_factor := 0.34 + float(seed % 4) * 0.08
+		flowers.scale = Vector3.ONE * scale_factor
+		flowers.rotation.y = float(seed * 47 % 360) * PI / 180.0
+		return
+	_add_plant(pos, seed)
 
 func _build_biome_details(rng: RandomNumberGenerator) -> void:
 	# Afloramentos rochosos assimétricos, com pedras de tamanhos variados.

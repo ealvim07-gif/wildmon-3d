@@ -156,10 +156,21 @@ func _build_world() -> void:
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 81027
+	# Bosques em manchas irregulares, com árvores isoladas entre os grupos.
+	var grove_centers := [Vector2(-43.0, -39.0), Vector2(43.0, -37.0), Vector2(-46.0, 39.0), Vector2(45.0, 40.0)]
 	for i in range(68):
-		var px := rng.randf_range(-65.0, 65.0)
-		var pz := rng.randf_range(-66.0, 66.0)
+		var px: float
+		var pz: float
+		if i % 7 == 0:
+			px = rng.randf_range(-65.0, 65.0)
+			pz = rng.randf_range(-66.0, 66.0)
+		else:
+			var center: Vector2 = grove_centers[i % grove_centers.size()]
+			px = center.x + rng.randf_range(-14.0, 14.0)
+			pz = center.y + rng.randf_range(-13.0, 13.0)
 		if absf(px) < 9.0 and pz < 11.0 and pz > -31.0:
+			continue
+		if Vector2(px + 17.0, pz + 12.0).length() < 8.0:
 			continue
 		_add_tree(Vector3(px, _terrain_height(px, pz), pz), i)
 	for i in range(72):

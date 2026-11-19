@@ -41,7 +41,7 @@ func _input(event: InputEvent) -> void:
 			camera_drag_active = false
 	elif event is InputEventScreenDrag and camera_drag_active:
 		target_look_yaw -= event.relative.x * CAMERA_SENSITIVITY
-		target_look_pitch = clampf(target_look_pitch + event.relative.y * CAMERA_SENSITIVITY, -0.34, 0.82)
+		target_look_pitch = clampf(target_look_pitch + event.relative.y * CAMERA_SENSITIVITY, -0.58, 0.82)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		camera_drag_active = event.pressed
 	elif event is InputEventMouseMotion and camera_drag_active and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
@@ -343,7 +343,7 @@ func _terrain_height(x: float, z: float) -> float:
 	return maxf(-0.28, (rolling + ridge_a + ridge_b + detail + erosion) * edge_factor)
 
 func _add_rock(pos: Vector3, seed: int) -> void:
-	var rock_scene := _get_nature_scene(["Rock_Medium_1", "Rock_Medium_2"], seed)
+	var rock_scene := _get_nature_scene(["Rock_Medium_1", "Rock_Medium_2", "Rock001", "Rock002", "Rock003"], seed)
 	if rock_scene:
 		var rock := rock_scene.instantiate() as Node3D
 		add_child(rock)
@@ -363,7 +363,7 @@ func _add_rock(pos: Vector3, seed: int) -> void:
 	add_child(rock)
 
 func _add_grass_tuft(pos: Vector3, seed: int) -> void:
-	var grass_scene := _get_nature_scene(["Grass_Common_Tall", "Clover_1"], seed)
+	var grass_scene := _get_nature_scene(["Grass_Common_Tall", "Clover_1", "Grass001", "Grass002"], seed)
 	if grass_scene:
 		var grass := grass_scene.instantiate() as Node3D
 		add_child(grass)
@@ -383,7 +383,7 @@ func _add_grass_tuft(pos: Vector3, seed: int) -> void:
 		add_child(grass)
 
 func _add_tree(pos: Vector3, seed: int) -> void:
-	var tree_scene := _get_nature_scene(["CommonTree_1", "CommonTree_2", "CommonTree_3", "Pine_1", "Pine_2"], seed)
+	var tree_scene := _get_nature_scene(["CommonTree_1", "CommonTree_2", "CommonTree_3", "Pine_1", "Pine_2", "TreeHigh001", "TreeHigh002", "TreeHigh003"], seed)
 	if tree_scene:
 		var tree := tree_scene.instantiate() as Node3D
 		add_child(tree)
@@ -417,15 +417,21 @@ func _get_nature_scene(names: Array, seed: int) -> PackedScene:
 		return null
 	var model_name: String = names[seed % names.size()]
 	if not nature_model_cache.has(model_name):
-		var path := "res://assets/nature/" + model_name + ".gltf"
-		if ResourceLoader.exists(path):
-			nature_model_cache[model_name] = load(path)
-		else:
-			nature_model_cache[model_name] = null
+		var paths := [
+			"res://assets/nature/" + model_name + ".gltf",
+			"res://assets/gobkit/" + model_name + ".glb"
+		]
+		var loaded: PackedScene = null
+		for path in paths:
+			if ResourceLoader.exists(path):
+				loaded = load(path) as PackedScene
+				if loaded:
+					break
+		nature_model_cache[model_name] = loaded
 	return nature_model_cache[model_name] as PackedScene
 
 func _add_plant(pos: Vector3, seed: int) -> void:
-	var plant_scene := _get_nature_scene(["Fern_1", "Bush_Common", "Clover_1", "Flower_3_Group"], seed)
+	var plant_scene := _get_nature_scene(["Fern_1", "Bush_Common", "Clover_1", "Flower_3_Group", "Bush001", "Bush002", "Reed001", "Reed002"], seed)
 	if plant_scene:
 		var plant := plant_scene.instantiate() as Node3D
 		add_child(plant)

@@ -174,7 +174,10 @@ func _process(delta: float) -> void:
 	if not camera_hit.is_empty():
 		var hit_position: Vector3 = camera_hit.position
 		var safe_direction := (desired_camera_position - target).normalized()
-		desired_camera_position = hit_position - safe_direction * 0.28
+		desired_camera_position = hit_position - safe_direction * 0.42
+	# Mantém a câmera acima da superfície mesmo em inclinações e transições do relevo.
+	var camera_floor := _terrain_height(desired_camera_position.x, desired_camera_position.z) + 1.25
+	desired_camera_position.y = maxf(desired_camera_position.y, camera_floor)
 	camera.global_position = camera.global_position.lerp(desired_camera_position, minf(delta * 4.4, 1.0))
 	camera.look_at(target, Vector3.UP)
 	if creature and not creature_captured:
@@ -220,12 +223,16 @@ func _physics_process(delta: float) -> void:
 		player.velocity.y = 0
 	player.move_and_slide()
 	var bounded_position := player.global_position
-	bounded_position.x = clampf(bounded_position.x, -66.0, 66.0)
-	bounded_position.z = clampf(bounded_position.z, -66.0, 66.0)
+	bounded_position.x = clampf(bounded_position.x, -64.0, 64.0)
+	bounded_position.z = clampf(bounded_position.z, -64.0, 64.0)
 	if bounded_position != player.global_position:
 		player.global_position = bounded_position
 		player.velocity.x = 0.0
 		player.velocity.z = 0.0
+	# Recuperação defensiva: nunca deixa a câmera acompanhar o jogador sob o mapa.
+	if player.global_position.y < -2.0:
+		player.global_position = Vector3(0.0, _terrain_height(0.0, 4.0) + 1.1, 4.0)
+		player.velocity = Vector3.ZERO
 	if player_model:
 		var moving := direction.length() > 0.1
 		var gait := sin(Time.get_ticks_msec() * 0.012) if moving else 0.0
@@ -278,8 +285,10 @@ func _build_world() -> void:
 	add_child(sun)
 
 	_build_terrain()
+	# Piso de segurança muito abaixo do mapa: só impede queda infinita caso
+	# algum objeto saia dos limites, sem aparecer na câmera durante o jogo.
 	var ground_body := StaticBody3D.new()
-	ground_body.position.y = -4.5
+	ground_body.position.y = -14.0
 	add_child(ground_body)
 	var ground_shape := CollisionShape3D.new()
 	var ground_box := BoxShape3D.new()
@@ -775,7 +784,29 @@ func _build_terrain() -> void:
 	terrain_material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	terrain_mesh.material_override = terrain_material
 	add_child(terrain_mesh)
-	terrain_mesh.create_trimesh_collision()
+
+	# Colisão por heightmap amostrada nos mesmos pontos da malha visual.
+	# Mais estável para terreno contínuo no Android que a trimesh automática.
+	var height_values := PackedFloat32Array()
+	height_values.resize((segments + 1) * (segments + 1))
+	for z in range(segments + 1):
+		for x in range(segments + 1):
+			var world_x := -half_size + float(x) * step
+			var world_z := -half_size + float(z) * step
+			height_values[z * (segments + 1) + x] = _terrain_height(world_x, world_z)
+	var height_shape := HeightMapShape3D.new()
+	height_shape.map_width = segments + 1
+	height_shape.map_depth = segments + 1
+	height_shape.map_data = height_values
+	height_shape.map_scale = Vector3(step, 1.0, step)
+	var terrain_body := StaticBody3D.new()
+	terrain_body.name = "TerrainCollision"
+	terrain_body.collision_layer = 1
+	terrain_body.collision_mask = 1
+	var terrain_collision := CollisionShape3D.new()
+	terrain_collision.shape = height_shape
+	terrain_body.add_child(terrain_collision)
+	add_child(terrain_body)
 
 func _terrain_vertex_color(x: float, z: float, height: float, noise: FastNoiseLite) -> Color:
 	var variation := noise.get_noise_2d(x, z) * 0.045

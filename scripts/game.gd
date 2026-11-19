@@ -727,42 +727,65 @@ func _build_waterhole() -> void:
 		_add_reed(Vector3(reed_x, _terrain_height(reed_x, reed_z) + 0.03, reed_z), 410 + i)
 
 func _build_terrain() -> void:
-	# Terrain3D gera malha com LOD e colisão própria, substituindo a malha
-	# densa fixa do protótipo. O mapa é criado a partir do mesmo relevo usado
-	# para posicionar árvores, plantas, trilha e criaturas.
-	if not ClassDB.can_instantiate("Terrain3D"):
-		push_error("Terrain3D não foi carregado. Confira addons/terrain_3d.")
-		return
+	# Malha de terreno explícita: a superfície visível e a colisão são geradas
+	# dos mesmos vértices, evitando divergência de altura entre render e física.
+	var segments := 176
+	var world_size := 132.0
+	var step := world_size / float(segments)
+	var half_size := world_size * 0.5
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var terrain_noise := FastNoiseLite.new()
+	terrain_noise.seed = 41827
+	terrain_noise.frequency = 0.12
+	for z in range(segments + 1):
+		for x in range(segments + 1):
+			var world_x := -half_size + float(x) * step
+			var world_z := -half_size + float(z) * step
+			var height := _terrain_height(world_x, world_z)
+			var color := _terrain_vertex_color(world_x, world_z, height, terrain_noise)
+			var p00 := Vector3(world_x, height, world_z)
+			if x < segments and z < segments:
+				var p10 := Vector3(world_x + step, _terrain_height(world_x + step, world_z), world_z)
+				var p01 := Vector3(world_x, _terrain_height(world_x, world_z + step), world_z + step)
+				var p11 := Vector3(world_x + step, _terrain_height(world_x + step, world_z + step), world_z + step)
+				var c10 := _terrain_vertex_color(p10.x, p10.z, p10.y, terrain_noise)
+				var c01 := _terrain_vertex_color(p01.x, p01.z, p01.y, terrain_noise)
+				var c11 := _terrain_vertex_color(p11.x, p11.z, p11.y, terrain_noise)
+				# Ordem anti-horária vista de cima: normais apontam para +Y.
+				surface.set_color(color)
+				surface.add_vertex(p00)
+				surface.set_color(c01)
+				surface.add_vertex(p01)
+				surface.set_color(c10)
+				surface.add_vertex(p10)
+				surface.set_color(c10)
+				surface.add_vertex(p10)
+				surface.set_color(c01)
+				surface.add_vertex(p01)
+				surface.set_color(c11)
+				surface.add_vertex(p11)
+	surface.generate_normals()
+	var terrain_mesh := MeshInstance3D.new()
+	terrain_mesh.name = "GroundSurface"
+	terrain_mesh.mesh = surface.commit()
+	var terrain_material := StandardMaterial3D.new()
+	terrain_material.vertex_color_use_as_albedo = true
+	terrain_material.roughness = 1.0
+	terrain_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	terrain_mesh.material_override = terrain_material
+	add_child(terrain_mesh)
+	terrain_mesh.create_trimesh_collision()
 
-	var terrain := Terrain3D.new()
-	terrain.name = "Terrain3D"
-	terrain.region_size = 256
-	terrain.mesh_lods = 6
-	terrain.mesh_size = 32
-	terrain.collision_mode = Terrain3DCollision.FULL_GAME
-	add_child(terrain)
-
-	terrain.material.world_background = Terrain3DMaterial.NONE
-	terrain.material.auto_shader = true
-	terrain.material.set_shader_param("auto_slope", 18.0)
-	terrain.material.set_shader_param("blend_sharpness", 0.965)
-
-	var terrain_assets := Terrain3DAssets.new()
-	terrain_assets.set_texture(0, _make_terrain_texture(
-		"Vale - grama", Color(0.17, 0.29, 0.12), Color(0.34, 0.43, 0.19), 713
-	))
-	terrain_assets.set_texture(1, _make_terrain_texture(
-		"Solo - terra e pedra", Color(0.31, 0.25, 0.16), Color(0.48, 0.40, 0.28), 927
-	))
-	terrain.assets = terrain_assets
-
-	var height_map := Image.create(256, 256, false, Image.FORMAT_RF)
-	for z in range(256):
-		for x in range(256):
-			var world_x := float(x) - 128.0
-			var world_z := float(z) - 128.0
-			height_map.set_pixel(x, z, Color(_terrain_height(world_x, world_z) / 3.5, 0.0, 0.0, 1.0))
-	terrain.data.import_images([height_map, null, null], Vector3(-128.0, 0.0, -128.0), 0.0, 3.5)
+func _terrain_vertex_color(x: float, z: float, height: float, noise: FastNoiseLite) -> Color:
+	var variation := noise.get_noise_2d(x, z) * 0.045
+	var lowland := Color(0.24, 0.34, 0.16)
+	var hillside := Color(0.31, 0.36, 0.19)
+	var rocky := Color(0.39, 0.37, 0.30)
+	var color := lowland.lerp(hillside, clampf((height - 0.25) / 1.35, 0.0, 1.0))
+	color = color.lerp(rocky, clampf((height - 1.8) / 1.0, 0.0, 0.72))
+	color += Color(variation, variation, variation * 0.72, 0.0)
+	return color
 
 func _make_terrain_texture(asset_name: String, base_color: Color, accent_color: Color, noise_seed: int) -> Terrain3DTextureAsset:
 	var broad_noise := FastNoiseLite.new()

@@ -259,84 +259,60 @@ func _build_waterhole() -> void:
 		_add_rock(Vector3(-17.0 + cos(angle) * 4.45, shore.position.y + 0.08, -12.0 + sin(angle) * 4.45), i + 90)
 
 func _build_terrain() -> void:
-	var surface := SurfaceTool.new()
-	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var divisions := 160
-	var world_size := 144.0
-	for z in range(divisions):
-		for x in range(divisions):
-			var x0 := -world_size * 0.5 + world_size * float(x) / float(divisions)
-			var x1 := -world_size * 0.5 + world_size * float(x + 1) / float(divisions)
-			var z0 := -world_size * 0.5 + world_size * float(z) / float(divisions)
-			var z1 := -world_size * 0.5 + world_size * float(z + 1) / float(divisions)
-			var p00 := Vector3(x0, _terrain_height(x0, z0), z0)
-			var p10 := Vector3(x1, _terrain_height(x1, z0), z0)
-			var p01 := Vector3(x0, _terrain_height(x0, z1), z1)
-			var p11 := Vector3(x1, _terrain_height(x1, z1), z1)
-			surface.add_vertex(p00)
-			surface.add_vertex(p01)
-			surface.add_vertex(p10)
-			surface.add_vertex(p10)
-			surface.add_vertex(p01)
-			surface.add_vertex(p11)
-	surface.generate_normals()
-	var terrain := MeshInstance3D.new()
-	terrain.mesh = surface.commit()
-	terrain.material_override = _terrain_material()
+	# Terrain3D gera malha com LOD e colisão própria, substituindo a malha
+	# densa fixa do protótipo. O mapa é criado a partir do mesmo relevo usado
+	# para posicionar árvores, plantas, trilha e criaturas.
+	if not ClassDB.can_instantiate("Terrain3D"):
+		push_error("Terrain3D não foi carregado. Confira addons/terrain_3d.")
+		return
+
+	var terrain := Terrain3D.new()
+	terrain.name = "Terrain3D"
+	terrain.region_size = 256
+	terrain.mesh_lods = 6
+	terrain.mesh_size = 32
+	terrain.collision.mode = Terrain3DCollision.DYNAMIC_GAME
+	terrain.material.world_background = Terrain3DMaterial.NONE
+	terrain.material.auto_shader = true
+	terrain.material.set_shader_param("auto_slope", 18.0)
+	terrain.material.set_shader_param("blend_sharpness", 0.965)
+
+	var terrain_assets := Terrain3DAssets.new()
+	terrain_assets.set_texture(0, _make_terrain_texture(
+		"Vale - grama", Color(0.17, 0.29, 0.12), Color(0.34, 0.43, 0.19), 713
+	))
+	terrain_assets.set_texture(1, _make_terrain_texture(
+		"Solo - terra e pedra", Color(0.31, 0.25, 0.16), Color(0.48, 0.40, 0.28), 927
+	))
+	terrain.assets = terrain_assets
+
+	var height_map := Image.create(256, 256, false, Image.FORMAT_RF)
+	for z in range(256):
+		for x in range(256):
+			var world_x := float(x) - 128.0
+			var world_z := float(z) - 128.0
+			height_map.set_pixel(x, z, Color(_terrain_height(world_x, world_z) / 3.5, 0.0, 0.0, 1.0))
+	terrain.data.import_images([height_map, null, null], Vector3(-128.0, 0.0, -128.0), 0.0, 3.5)
 	add_child(terrain)
 
-	# Colisão segue a malha real do relevo; o chão plano fica apenas como segurança distante.
-	var terrain_body := StaticBody3D.new()
-	terrain_body.name = "TerrainCollision"
-	add_child(terrain_body)
-	var terrain_collision := CollisionShape3D.new()
-	var terrain_shape := ConcavePolygonShape3D.new()
-	terrain_shape.set_faces(terrain.mesh.get_faces())
-	terrain_collision.shape = terrain_shape
-	terrain_body.add_child(terrain_collision)
-
-func _terrain_material() -> ShaderMaterial:
-	var shader := Shader.new()
-	shader.code = """
-shader_type spatial;
-render_mode diffuse_burley, specular_schlick_ggx;
-varying vec3 world_position;
-float hash(vec2 p) {
-	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-}
-float noise(vec2 p) {
-	vec2 i = floor(p);
-	vec2 f = fract(p);
-	f = f * f * (3.0 - 2.0 * f);
-	return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
-		mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
-}
-void vertex() {
-	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-}
-void fragment() {
-	float broad = noise(world_position.xz * 0.16);
-	float fine = noise(world_position.xz * 1.9);
-	float detail = noise(world_position.xz * 7.0);
-	float slope = 1.0 - clamp(dot(normalize(NORMAL), vec3(0.0, 1.0, 0.0)), 0.0, 1.0);
-	vec3 grass_a = vec3(0.17, 0.30, 0.13);
-	vec3 grass_b = vec3(0.30, 0.42, 0.19);
-	vec3 dry = vec3(0.43, 0.37, 0.23);
-	vec3 stone = vec3(0.34, 0.34, 0.29);
-	vec3 ground = mix(grass_a, grass_b, broad * 0.72 + fine * 0.28);
-	float dry_biome = smoothstep(18.0, 54.0, world_position.x) * smoothstep(-8.0, 38.0, world_position.z);
-	float woodland_biome = smoothstep(-58.0, -28.0, world_position.x) * (1.0 - smoothstep(24.0, 54.0, world_position.z));
-	vec3 woodland_soil = vec3(0.13, 0.25, 0.12);
-	ground = mix(ground, dry, max(smoothstep(0.56, 0.78, broad) * 0.38, dry_biome * 0.58));
-	ground = mix(ground, woodland_soil, woodland_biome * 0.42);
-	ground = mix(ground, stone, smoothstep(0.34, 0.72, slope) * 0.48);
-	ALBEDO = ground * (0.91 + detail * 0.16);
-	ROUGHNESS = 0.96;
-}
-"""
-	var material := ShaderMaterial.new()
-	material.shader = shader
-	return material
+func _make_terrain_texture(asset_name: String, base_color: Color, accent_color: Color, noise_seed: int) -> Terrain3DTextureAsset:
+	var noise := FastNoiseLite.new()
+	noise.seed = noise_seed
+	noise.frequency = 0.035
+	var albedo_image := Image.create(256, 256, false, Image.FORMAT_RGBA8)
+	var normal_image := Image.create(256, 256, false, Image.FORMAT_RGBA8)
+	normal_image.fill(Color(0.5, 0.5, 1.0, 0.82))
+	for y in range(256):
+		for x in range(256):
+			var variation := clampf(0.5 + noise.get_noise_2d(float(x), float(y)) * 0.48, 0.0, 1.0)
+			var color := base_color.lerp(accent_color, variation)
+			albedo_image.set_pixel(x, y, Color(color.r, color.g, color.b, 0.5 + variation * 0.2))
+	var asset := Terrain3DTextureAsset.new()
+	asset.name = asset_name
+	asset.albedo_texture = ImageTexture.create_from_image(albedo_image)
+	asset.normal_texture = ImageTexture.create_from_image(normal_image)
+	asset.uv_scale = 0.12
+	return asset
 
 func _terrain_height(x: float, z: float) -> float:
 	var edge_factor := clampf((maxf(absf(x), absf(z)) - 4.0) / 25.0, 0.0, 1.0)

@@ -55,7 +55,7 @@ func _run_tests() -> void:
 		_fail("Mais de 1% das normais do terreno apontam para baixo.")
 		return
 
-	var space := game.get_world_3d().direct_space_state
+	var space: PhysicsDirectSpaceState3D = game.get_world_3d().direct_space_state
 	var checked_points := 0
 	for x in SAMPLE_COORDS:
 		for z in SAMPLE_COORDS:
@@ -68,7 +68,7 @@ func _run_tests() -> void:
 				Vector3(x, -8.0, z),
 				1
 			)
-			var hit := space.intersect_ray(query)
+			var hit: Dictionary = space.intersect_ray(query)
 			if hit.is_empty():
 				_fail("Sem colisão do chão no ponto (%s, %s)." % [x, z])
 				return

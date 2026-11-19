@@ -56,7 +56,16 @@ func _process(delta: float) -> void:
 	var target := player.global_position + Vector3(0, 1.25, 0)
 	var horizontal := cos(look_pitch) * CAMERA_DISTANCE
 	var cam_offset := Vector3(sin(look_yaw) * horizontal, sin(look_pitch) * CAMERA_DISTANCE, cos(look_yaw) * horizontal)
-	camera.global_position = camera.global_position.lerp(target + cam_offset, minf(delta * 4.4, 1.0))
+	var desired_camera_position := target + cam_offset
+	var camera_query := PhysicsRayQueryParameters3D.create(target, desired_camera_position)
+	camera_query.collision_mask = 1
+	camera_query.exclude = [player.get_rid()]
+	var camera_hit := get_world_3d().direct_space_state.intersect_ray(camera_query)
+	if not camera_hit.is_empty():
+		var hit_position: Vector3 = camera_hit.position
+		var safe_direction := (desired_camera_position - target).normalized()
+		desired_camera_position = hit_position - safe_direction * 0.28
+	camera.global_position = camera.global_position.lerp(desired_camera_position, minf(delta * 4.4, 1.0))
 	camera.look_at(target, Vector3.UP)
 	if creature and not creature_captured:
 		creature.rotate_y(delta * 0.55)

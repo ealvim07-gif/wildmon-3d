@@ -103,6 +103,30 @@ jobs:
             -dname "CN=Android Debug,O=Android,C=US" \
             -keyalg RSA -keysize 2048 -validity 10000
           echo "ANDROID_DEBUG_KEYSTORE=$HOME/.android/debug.keystore" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/.config/godot"
+          cat > "$HOME/.config/godot/editor_settings-4.tres" <<EOF
+          [gd_resource type="EditorSettings" format=3]
+          [resource]
+          export/android/android_sdk_path = "$ANDROID_HOME"
+          export/android/java_sdk_path = "$JAVA_HOME"
+          EOF
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("export_presets.cfg")
+          data = path.read_text(encoding="utf-8")
+          marker = "[preset.0.options]\n"
+          settings = (
+              'keystore/debug="' + str(Path.home() / ".android/debug.keystore") + '"\n'
+              'keystore/debug_user="androiddebugkey"\n'
+              'keystore/debug_password="android"\n'
+          )
+          if marker not in data:
+              raise SystemExit("Android preset options section not found")
+          if "keystore/debug=" not in data:
+              data = data.replace(marker, marker + settings, 1)
+          path.write_text(data, encoding="utf-8")
+          print("Configured temporary Android debug signing key in the CI workspace.")
+          PY
 
       - name: Export Android debug APK
         shell: bash
@@ -110,7 +134,7 @@ jobs:
           set -euo pipefail
           mkdir -p build
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
-            --export-debug "Android" "build/Wildmon3D-Beta01.apk"
+            --verbose --export-debug "Android" "build/Wildmon3D-Beta01.apk"
 
       - name: Verify APK package and archive
         shell: bash

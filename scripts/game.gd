@@ -154,25 +154,25 @@ func _build_world() -> void:
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 81027
-	for i in range(104):
+	for i in range(68):
 		var px := rng.randf_range(-65.0, 65.0)
 		var pz := rng.randf_range(-66.0, 66.0)
 		if absf(px) < 9.0 and pz < 11.0 and pz > -31.0:
 			continue
 		_add_tree(Vector3(px, _terrain_height(px, pz), pz), i)
-	for i in range(150):
+	for i in range(72):
 		var px := rng.randf_range(-66.0, 66.0)
 		var pz := rng.randf_range(-66.0, 66.0)
 		if absf(px) < 7.0 and pz < 12.0 and pz > -31.0:
 			continue
 		_add_plant(Vector3(px, _terrain_height(px, pz), pz), i)
-	for i in range(58):
+	for i in range(36):
 		var px := rng.randf_range(-66.0, 66.0)
 		var pz := rng.randf_range(-66.0, 66.0)
 		if absf(px) < 9.0 and pz < 12.0 and pz > -30.0:
 			continue
 		_add_rock(Vector3(px, _terrain_height(px, pz), pz), i)
-	for i in range(190):
+	for i in range(84):
 		var px := rng.randf_range(-67.0, 67.0)
 		var pz := rng.randf_range(-67.0, 67.0)
 		if absf(px) < 8.0 and pz < 12.0 and pz > -31.0:
@@ -324,7 +324,11 @@ void fragment() {
 	vec3 dry = vec3(0.43, 0.37, 0.23);
 	vec3 stone = vec3(0.34, 0.34, 0.29);
 	vec3 ground = mix(grass_a, grass_b, broad * 0.72 + fine * 0.28);
-	ground = mix(ground, dry, smoothstep(0.56, 0.78, broad) * 0.38);
+	float dry_biome = smoothstep(18.0, 54.0, world_position.x) * smoothstep(-8.0, 38.0, world_position.z);
+	float woodland_biome = smoothstep(-58.0, -28.0, world_position.x) * (1.0 - smoothstep(24.0, 54.0, world_position.z));
+	vec3 woodland_soil = vec3(0.13, 0.25, 0.12);
+	ground = mix(ground, dry, max(smoothstep(0.56, 0.78, broad) * 0.38, dry_biome * 0.58));
+	ground = mix(ground, woodland_soil, woodland_biome * 0.42);
 	ground = mix(ground, stone, smoothstep(0.34, 0.72, slope) * 0.48);
 	ALBEDO = ground * (0.91 + detail * 0.16);
 	ROUGHNESS = 0.96;

@@ -232,8 +232,9 @@ func _physics_process(delta: float) -> void:
 		player.velocity.x = 0.0
 		player.velocity.z = 0.0
 	# Recuperação defensiva: nunca deixa a câmera acompanhar o jogador sob o mapa.
-	if player.global_position.y < -2.0:
-		player.global_position = Vector3(0.0, _terrain_height(0.0, 4.0) + 1.1, 4.0)
+	var floor_height := _terrain_height(player.global_position.x, player.global_position.z)
+	if player.global_position.y < floor_height - 0.85 or player.global_position.y < -2.0:
+		player.global_position = Vector3(player.global_position.x, floor_height + 0.08, player.global_position.z)
 		player.velocity = Vector3.ZERO
 	if player_model:
 		var moving := direction.length() > 0.1
@@ -253,6 +254,7 @@ func _build_world() -> void:
 	var world_env := WorldEnvironment.new()
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
+	env.background_energy_multiplier = 1.0
 	var sky := Sky.new()
 	var sky_mat := ProceduralSkyMaterial.new()
 	sky_mat.sky_top_color = Color(0.31, 0.57, 0.88)
@@ -261,6 +263,7 @@ func _build_world() -> void:
 	sky_mat.ground_horizon_color = Color(0.62, 0.70, 0.56)
 	sky_mat.sun_angle_max = 24.0
 	sky_mat.sun_curve = 0.18
+	sky_mat.use_debanding = true
 	sky.sky_material = sky_mat
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
@@ -270,8 +273,8 @@ func _build_world() -> void:
 	env.tonemap_exposure = 1.30
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.72, 0.82, 0.86)
-	env.fog_density = 0.0015
-	env.fog_sky_affect = 0.62
+	env.fog_density = 0.0008
+	env.fog_sky_affect = 0.25
 	env.adjustment_enabled = true
 	env.adjustment_saturation = 1.08
 	world_env.environment = env
@@ -820,7 +823,8 @@ func _build_terrain() -> void:
 	var terrain_material := StandardMaterial3D.new()
 	terrain_material.vertex_color_use_as_albedo = true
 	terrain_material.roughness = 1.0
-	terrain_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	# A face superior é a única visível; evita enxergar a parte inferior do mapa.
+	terrain_material.cull_mode = BaseMaterial3D.CULL_BACK
 	# Ruído fino repetido no chão quebra a aparência lisa sem exigir shaders pesados.
 	var ground_image := Image.create(128, 128, false, Image.FORMAT_RGBA8)
 	var ground_noise := FastNoiseLite.new()
@@ -836,28 +840,16 @@ func _build_terrain() -> void:
 	terrain_mesh.material_override = terrain_material
 	add_child(terrain_mesh)
 
-	# Colisão por heightmap amostrada nos mesmos pontos da malha visual.
-	# Mais estável para terreno contínuo no Android que a trimesh automática.
-	var height_values := PackedFloat32Array()
-	height_values.resize((segments + 1) * (segments + 1))
-	for z in range(segments + 1):
-		for x in range(segments + 1):
-			var world_x := -half_size + float(x) * step
-			var world_z := -half_size + float(z) * step
-			height_values[z * (segments + 1) + x] = _terrain_height(world_x, world_z) / step
-	var height_shape := HeightMapShape3D.new()
-	height_shape.map_width = segments + 1
-	height_shape.map_depth = segments + 1
-	height_shape.map_data = height_values
-	
+	# A colisão é criada diretamente da malha renderizada. Assim, não há
+	# diferenças de origem, escala, orientação ou amostragem entre chão e física.
+	# ConcavePolygonShape3D é apropriada para uma superfície estática de terreno.
 	var terrain_body := StaticBody3D.new()
 	terrain_body.name = "TerrainCollision"
 	terrain_body.collision_layer = 1
 	terrain_body.collision_mask = 1
 	var terrain_collision := CollisionShape3D.new()
-	terrain_collision.shape = height_shape
-	# Escala uniforme é compatível com o backend de física do Godot.
-	terrain_collision.scale = Vector3.ONE * step
+	terrain_collision.name = "TerrainMeshCollision"
+	terrain_collision.shape = terrain_mesh.mesh.create_trimesh_shape()
 	terrain_body.add_child(terrain_collision)
 	add_child(terrain_body)
 
@@ -1081,6 +1073,9 @@ func _build_player() -> void:
 	body.shape = capsule
 	body.position.y = 0.90
 	player.add_child(body)
+	player.floor_snap_length = 0.55
+	player.floor_max_angle = deg_to_rad(48.0)
+	player.safe_margin = 0.04
 
 	player_model = Node3D.new()
 	player.add_child(player_model)

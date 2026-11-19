@@ -75,7 +75,7 @@ class AnalogStick extends Control:
 
 const MOVE_SPEED := 5.2
 const TURN_SPEED := 10.0
-const CAMERA_DISTANCE := 6.5
+const CAMERA_DISTANCE := 5.6
 
 var player: CharacterBody3D
 var player_model: Node3D
@@ -96,8 +96,8 @@ var collection_label: Label
 var creature_in_range := false
 var look_yaw := 0.0
 var target_look_yaw := 0.0
-var look_pitch := 0.28
-var target_look_pitch := 0.28
+var look_pitch := 0.18
+var target_look_pitch := 0.18
 const CAMERA_SENSITIVITY := 0.00155
 var nature_model_cache: Dictionary = {}
 var status_label: Label
@@ -255,22 +255,22 @@ func _build_world() -> void:
 	env.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
 	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.10, 0.30, 0.62)
-	sky_mat.sky_horizon_color = Color(0.68, 0.79, 0.84)
-	sky_mat.ground_bottom_color = Color(0.17, 0.23, 0.17)
-	sky_mat.ground_horizon_color = Color(0.54, 0.62, 0.48)
+	sky_mat.sky_top_color = Color(0.22, 0.43, 0.72)
+	sky_mat.sky_horizon_color = Color(0.76, 0.86, 0.91)
+	sky_mat.ground_bottom_color = Color(0.28, 0.34, 0.27)
+	sky_mat.ground_horizon_color = Color(0.62, 0.70, 0.56)
 	sky_mat.sun_angle_max = 24.0
 	sky_mat.sun_curve = 0.18
 	sky.sky_material = sky_mat
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ambient_light_color = Color(0.78, 0.84, 0.91)
-	env.ambient_light_energy = 0.72
+	env.ambient_light_energy = 0.95
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.08
+	env.tonemap_exposure = 1.22
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.65, 0.75, 0.78)
-	env.fog_density = 0.0045
+	env.fog_density = 0.0022
 	env.fog_sky_affect = 0.62
 	env.adjustment_enabled = true
 	env.adjustment_saturation = 1.08
@@ -814,9 +814,9 @@ func _build_terrain() -> void:
 
 func _terrain_vertex_color(x: float, z: float, height: float, noise: FastNoiseLite) -> Color:
 	var variation := noise.get_noise_2d(x, z) * 0.045
-	var lowland := Color(0.24, 0.34, 0.16)
-	var hillside := Color(0.31, 0.36, 0.19)
-	var rocky := Color(0.39, 0.37, 0.30)
+	var lowland := Color(0.27, 0.39, 0.19)
+	var hillside := Color(0.36, 0.43, 0.23)
+	var rocky := Color(0.43, 0.42, 0.35)
 	var color := lowland.lerp(hillside, clampf((height - 0.25) / 1.35, 0.0, 1.0))
 	color = color.lerp(rocky, clampf((height - 1.8) / 1.0, 0.0, 0.72))
 	color += Color(variation, variation, variation * 0.72, 0.0)

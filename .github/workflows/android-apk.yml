@@ -91,6 +91,13 @@ jobs:
           du -sh assets/nature
           find assets/nature -maxdepth 1 -type f | sort
 
+      - name: Install pinned Terrain3D 1.0.2 addon
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x scripts/fetch_terrain3d.sh
+          scripts/fetch_terrain3d.sh
+
       - name: Validate project scripts and resources
         shell: bash
         run: |

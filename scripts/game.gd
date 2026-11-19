@@ -798,25 +798,30 @@ func _build_terrain() -> void:
 				var c01 := _terrain_vertex_color(p01.x, p01.z, p01.y, terrain_noise)
 				var c11 := _terrain_vertex_color(p11.x, p11.z, p11.y, terrain_noise)
 				# Ordem anti-horária vista de cima: normais apontam para +Y.
+				surface.set_normal(_terrain_normal(p00.x, p00.z))
 				surface.set_color(color)
 				surface.set_uv(Vector2(p00.x, p00.z))
 				surface.add_vertex(p00)
+				surface.set_normal(_terrain_normal(p01.x, p01.z))
 				surface.set_color(c01)
 				surface.set_uv(Vector2(p01.x, p01.z))
 				surface.add_vertex(p01)
+				surface.set_normal(_terrain_normal(p10.x, p10.z))
 				surface.set_color(c10)
 				surface.set_uv(Vector2(p10.x, p10.z))
 				surface.add_vertex(p10)
+				surface.set_normal(_terrain_normal(p10.x, p10.z))
 				surface.set_color(c10)
 				surface.set_uv(Vector2(p10.x, p10.z))
 				surface.add_vertex(p10)
+				surface.set_normal(_terrain_normal(p01.x, p01.z))
 				surface.set_color(c01)
 				surface.set_uv(Vector2(p01.x, p01.z))
 				surface.add_vertex(p01)
+				surface.set_normal(_terrain_normal(p11.x, p11.z))
 				surface.set_color(c11)
 				surface.set_uv(Vector2(p11.x, p11.z))
 				surface.add_vertex(p11)
-	surface.generate_normals()
 	var terrain_mesh := MeshInstance3D.new()
 	terrain_mesh.name = "GroundSurface"
 	terrain_mesh.mesh = surface.commit()
@@ -852,6 +857,14 @@ func _build_terrain() -> void:
 	terrain_collision.shape = terrain_mesh.mesh.create_trimesh_shape()
 	terrain_body.add_child(terrain_collision)
 	add_child(terrain_body)
+
+func _terrain_normal(x: float, z: float) -> Vector3:
+	# Normal calculada pelo gradiente do relevo; evita depender da orientação
+	# implícita do SurfaceTool em triângulos com vértices duplicados.
+	var epsilon := 0.25
+	var slope_x := (_terrain_height(x + epsilon, z) - _terrain_height(x - epsilon, z)) / (2.0 * epsilon)
+	var slope_z := (_terrain_height(x, z + epsilon) - _terrain_height(x, z - epsilon)) / (2.0 * epsilon)
+	return Vector3(-slope_x, 1.0, -slope_z).normalized()
 
 func _terrain_vertex_color(x: float, z: float, height: float, noise: FastNoiseLite) -> Color:
 	var variation := noise.get_noise_2d(x, z) * 0.075 + sin(x * 0.21 + z * 0.16) * 0.018

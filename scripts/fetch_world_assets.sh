@@ -33,14 +33,8 @@ for model in "${NATURE_MODELS[@]}"; do
   test -s "assets/gobkit/$model.glb"
 done
 
-# A small set of CC0 animated animals reserved for future wild encounters.
-ANIMAL_MODELS=(Fox Doe Squirrel Hedgehog Hare Owl)
-for model in "${ANIMAL_MODELS[@]}"; do
-  echo "Downloading Gobkit creature $model"
-  curl --fail --location --retry 3 --silent --show-error \
-    "$GOBKIT/animal006/$model.glb" --output "assets/gobkit/$model.glb"
-  test -s "assets/gobkit/$model.glb"
-done
+# Creature models are intentionally not fetched until their exact public file URLs
+# and animation metadata are verified; this prevents broken builds.
 
 cat > "$DEST/ASSET-LICENSE.txt" <<'EOF'
 Quaternius — Stylized Nature MegaKit (Standard assets)
@@ -48,9 +42,9 @@ License: CC0 1.0 Universal.
 Source mirror: https://github.com/agentkaerf/FreeModels
 Original pack: https://quaternius.com/packs/stylizednaturemegakit
 
-Gobkit selected environment and animal GLB assets
+Gobkit selected environment GLB assets
 License: CC0 1.0 Universal (public domain dedication).
 Source and manifest: https://gobkit.com/freebies and https://gobkit.com/api/free
-Only the explicitly listed GLB files are downloaded by this script.
+Only the explicitly listed environment GLB files are downloaded by this script. Creature downloads are deferred until verified direct URLs are available.
 EOF
-echo "Downloaded ${#FILES[@]} Quaternius files plus Gobkit environment and creature assets."
+echo "Downloaded ${#FILES[@]} Quaternius files plus Gobkit environment assets."

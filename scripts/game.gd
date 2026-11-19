@@ -5,8 +5,10 @@ const TURN_SPEED := 10.0
 const CAMERA_DISTANCE := 6.5
 
 var player: CharacterBody3D
+var player_model: Node3D
 var camera: Camera3D
 var creature: Node3D
+var creature_home := Vector3(2.5, 0.72, -9.0)
 var creature_captured := false
 var creature_in_range := false
 var look_yaw := 0.0
@@ -47,8 +49,9 @@ func _process(delta: float) -> void:
 	camera.global_position = camera.global_position.lerp(target + cam_offset, min(delta * 5.0, 1.0))
 	camera.look_at(target, Vector3.UP)
 	if creature and not creature_captured:
-		creature.rotate_y(delta * 0.8)
-		creature.position.y = 0.75 + sin(Time.get_ticks_msec() * 0.002) * 0.12
+		creature.rotate_y(delta * 0.55)
+		var creature_clock := Time.get_ticks_msec() * 0.00045
+		creature.position = creature_home + Vector3(sin(creature_clock) * 0.55, sin(creature_clock * 4.0) * 0.10, cos(creature_clock * 0.8) * 0.32)
 		var now_in_range := player.global_position.distance_to(creature.global_position) < 3.0
 		if now_in_range != creature_in_range:
 			creature_in_range = now_in_range
@@ -82,6 +85,11 @@ func _physics_process(delta: float) -> void:
 		player.global_position = bounded_position
 		player.velocity.x = 0.0
 		player.velocity.z = 0.0
+	if player_model:
+		var moving := direction.length() > 0.1
+		var gait := sin(Time.get_ticks_msec() * 0.012) if moving else 0.0
+		player_model.position.y = absf(gait) * 0.045
+		player_model.rotation.z = lerpf(player_model.rotation.z, gait * 0.025, min(delta * 8.0, 1.0))
 	if direction.length() > 0.1:
 		player.rotation.y = lerp_angle(player.rotation.y, atan2(direction.x, direction.z) + PI, min(delta * TURN_SPEED, 1.0))
 
@@ -425,22 +433,24 @@ func _build_player() -> void:
 	body.shape = capsule
 	body.position.y = 0.88
 	player.add_child(body)
+	player_model = Node3D.new()
+	player.add_child(player_model)
 
-	_add_sphere_part(player, Vector3(0, 1.20, 0), Vector3(0.43, 0.55, 0.31), Color(0.12, 0.31, 0.48))
-	_add_sphere_part(player, Vector3(0, 1.92, 0.015), Vector3(0.30, 0.34, 0.29), Color(0.88, 0.67, 0.52))
-	_add_sphere_part(player, Vector3(0, 2.13, -0.025), Vector3(0.34, 0.18, 0.32), Color(0.12, 0.15, 0.19))
-	_add_sphere_part(player, Vector3(0, 2.04, 0.015), Vector3(0.34, 0.10, 0.31), Color(0.86, 0.33, 0.12))
-	_add_sphere_part(player, Vector3(0, 0.63, 0), Vector3(0.34, 0.22, 0.27), Color(0.17, 0.20, 0.25))
-	_add_sphere_part(player, Vector3(0, 1.22, -0.34), Vector3(0.29, 0.39, 0.18), Color(0.72, 0.31, 0.12))
-	_add_sphere_part(player, Vector3(-0.17, 1.26, 0.27), Vector3(0.035, 0.40, 0.035), Color(0.91, 0.75, 0.42))
-	_add_sphere_part(player, Vector3(0.17, 1.26, 0.27), Vector3(0.035, 0.40, 0.035), Color(0.91, 0.75, 0.42))
+	_add_sphere_part(player_model, Vector3(0, 1.20, 0), Vector3(0.43, 0.55, 0.31), Color(0.12, 0.31, 0.48))
+	_add_sphere_part(player_model, Vector3(0, 1.92, 0.015), Vector3(0.30, 0.34, 0.29), Color(0.88, 0.67, 0.52))
+	_add_sphere_part(player_model, Vector3(0, 2.13, -0.025), Vector3(0.34, 0.18, 0.32), Color(0.12, 0.15, 0.19))
+	_add_sphere_part(player_model, Vector3(0, 2.04, 0.015), Vector3(0.34, 0.10, 0.31), Color(0.86, 0.33, 0.12))
+	_add_sphere_part(player_model, Vector3(0, 0.63, 0), Vector3(0.34, 0.22, 0.27), Color(0.17, 0.20, 0.25))
+	_add_sphere_part(player_model, Vector3(0, 1.22, -0.34), Vector3(0.29, 0.39, 0.18), Color(0.72, 0.31, 0.12))
+	_add_sphere_part(player_model, Vector3(-0.17, 1.26, 0.27), Vector3(0.035, 0.40, 0.035), Color(0.91, 0.75, 0.42))
+	_add_sphere_part(player_model, Vector3(0.17, 1.26, 0.27), Vector3(0.035, 0.40, 0.035), Color(0.91, 0.75, 0.42))
 	for side in [-1.0, 1.0]:
-		_add_capsule_part(player, Vector3(side * 0.47, 1.18, 0), Vector3(0.13, 0.40, 0.13), Color(0.82, 0.57, 0.42))
-		_add_sphere_part(player, Vector3(side * 0.49, 0.91, 0.02), Vector3(0.14, 0.14, 0.14), Color(0.18, 0.20, 0.23))
-		_add_capsule_part(player, Vector3(side * 0.19, 0.32, 0), Vector3(0.16, 0.42, 0.17), Color(0.12, 0.18, 0.27))
-		_add_sphere_part(player, Vector3(side * 0.19, 0.10, 0.10), Vector3(0.19, 0.11, 0.29), Color(0.09, 0.10, 0.12))
-	_add_sphere_part(player, Vector3(0, 1.91, 0.285), Vector3(0.045, 0.045, 0.035), Color(0.10, 0.09, 0.08))
-	_add_sphere_part(player, Vector3(0.17, 1.97, 0.27), Vector3(0.035, 0.045, 0.025), Color(0.10, 0.09, 0.08))
+		_add_capsule_part(player_model, Vector3(side * 0.47, 1.18, 0), Vector3(0.13, 0.40, 0.13), Color(0.82, 0.57, 0.42))
+		_add_sphere_part(player_model, Vector3(side * 0.49, 0.91, 0.02), Vector3(0.14, 0.14, 0.14), Color(0.18, 0.20, 0.23))
+		_add_capsule_part(player_model, Vector3(side * 0.19, 0.32, 0), Vector3(0.16, 0.42, 0.17), Color(0.12, 0.18, 0.27))
+		_add_sphere_part(player_model, Vector3(side * 0.19, 0.10, 0.10), Vector3(0.19, 0.11, 0.29), Color(0.09, 0.10, 0.12))
+	_add_sphere_part(player_model, Vector3(0, 1.91, 0.285), Vector3(0.045, 0.045, 0.035), Color(0.10, 0.09, 0.08))
+	_add_sphere_part(player_model, Vector3(0.17, 1.97, 0.27), Vector3(0.035, 0.045, 0.025), Color(0.10, 0.09, 0.08))
 
 	camera = Camera3D.new()
 	camera.current = true
@@ -451,7 +461,7 @@ func _build_player() -> void:
 
 func _build_creature() -> void:
 	creature = Node3D.new()
-	creature.position = Vector3(2.5, 0.72, -9)
+	creature.position = creature_home
 	add_child(creature)
 	# Brasafofo: raposa elemental original, com focinho, marcas e cauda flamejante.
 	_add_sphere_part(creature, Vector3(0, 0.02, 0), Vector3(0.70, 0.45, 0.43), Color(0.78, 0.22, 0.075))
@@ -480,38 +490,58 @@ func _build_creature() -> void:
 func _build_ui() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
+
 	var panel := PanelContainer.new()
-	panel.anchor_left = 0.02
+	panel.anchor_left = 0.025
 	panel.anchor_top = 0.025
-	panel.anchor_right = 0.98
-	panel.anchor_bottom = 0.16
+	panel.anchor_right = 0.975
+	panel.anchor_bottom = 0.155
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.035, 0.075, 0.085, 0.84)
+	panel_style.border_color = Color(0.47, 0.66, 0.54, 0.75)
+	panel_style.set_border_width_all(1)
+	panel_style.set_corner_radius_all(13)
+	panel_style.content_margin_left = 12
+	panel_style.content_margin_right = 12
+	panel_style.content_margin_top = 7
+	panel_style.content_margin_bottom = 7
+	panel.add_theme_stylebox_override("panel", panel_style)
 	layer.add_child(panel)
+
 	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 3)
 	panel.add_child(vbox)
 	var title := Label.new()
-	title.text = "WILDMON 3D  •  BETA 1.0"
+	title.text = "WILDMON 3D   •   BETA 1.0"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_font_size_override("font_size", 19)
+	title.add_theme_color_override("font_color", Color(0.91, 0.96, 0.87))
 	vbox.add_child(title)
 	status_label = Label.new()
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	status_label.text = "Carregando..."
+	status_label.add_theme_font_size_override("font_size", 13)
+	status_label.add_theme_color_override("font_color", Color(0.72, 0.84, 0.73))
+	status_label.text = "Explore o vale e encontre uma criatura!"
 	vbox.add_child(status_label)
 
 	var controls := HBoxContainer.new()
-	controls.anchor_left = 0.03
-	controls.anchor_top = 0.70
-	controls.anchor_right = 0.97
-	controls.anchor_bottom = 0.96
+	controls.anchor_left = 0.025
+	controls.anchor_top = 0.69
+	controls.anchor_right = 0.975
+	controls.anchor_bottom = 0.975
 	controls.alignment = BoxContainer.ALIGNMENT_CENTER
+	controls.add_theme_constant_override("separation", 12)
 	layer.add_child(controls)
+
 	var left_col := VBoxContainer.new()
+	left_col.add_theme_constant_override("separation", 3)
 	controls.add_child(left_col)
 	var up := _make_button("▲")
 	left_col.add_child(up)
 	up.button_down.connect(func(): touch_forward = true)
 	up.button_up.connect(func(): touch_forward = false)
 	var middle := HBoxContainer.new()
+	middle.add_theme_constant_override("separation", 3)
 	left_col.add_child(middle)
 	var left := _make_button("◀")
 	middle.add_child(left)
@@ -525,19 +555,48 @@ func _build_ui() -> void:
 	middle.add_child(right)
 	right.button_down.connect(func(): touch_right = true)
 	right.button_up.connect(func(): touch_right = false)
+
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	controls.add_child(spacer)
 	capture_button = _make_button("CAPTURAR")
-	capture_button.custom_minimum_size = Vector2(150, 66)
+	capture_button.custom_minimum_size = Vector2(148, 62)
+	capture_button.add_theme_font_size_override("font_size", 16)
+	var capture_style := StyleBoxFlat.new()
+	capture_style.bg_color = Color(0.70, 0.25, 0.09, 0.96)
+	capture_style.border_color = Color(1.0, 0.72, 0.38)
+	capture_style.set_border_width_all(2)
+	capture_style.set_corner_radius_all(12)
+	capture_button.add_theme_stylebox_override("normal", capture_style)
+	var capture_hover := capture_style.duplicate()
+	capture_hover.bg_color = Color(0.86, 0.34, 0.11, 1.0)
+	capture_button.add_theme_stylebox_override("hover", capture_hover)
+	var capture_pressed := capture_style.duplicate()
+	capture_pressed.bg_color = Color(0.48, 0.16, 0.06, 1.0)
+	capture_button.add_theme_stylebox_override("pressed", capture_pressed)
+	capture_button.add_theme_color_override("font_color", Color(1.0, 0.96, 0.87))
 	capture_button.pressed.connect(_try_capture)
 	controls.add_child(capture_button)
 
 func _make_button(text_value: String) -> Button:
 	var button := Button.new()
 	button.text = text_value
-	button.custom_minimum_size = Vector2(58, 58)
-	button.add_theme_font_size_override("font_size", 20)
+	button.custom_minimum_size = Vector2(54, 54)
+	button.add_theme_font_size_override("font_size", 18)
+	button.add_theme_color_override("font_color", Color(0.91, 0.95, 0.88))
+	button.focus_mode = Control.FOCUS_NONE
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(0.055, 0.12, 0.13, 0.84)
+	normal.border_color = Color(0.50, 0.67, 0.54, 0.85)
+	normal.set_border_width_all(1)
+	normal.set_corner_radius_all(11)
+	button.add_theme_stylebox_override("normal", normal)
+	var hover := normal.duplicate()
+	hover.bg_color = Color(0.12, 0.23, 0.19, 0.95)
+	button.add_theme_stylebox_override("hover", hover)
+	var pressed := normal.duplicate()
+	pressed.bg_color = Color(0.20, 0.33, 0.22, 1.0)
+	button.add_theme_stylebox_override("pressed", pressed)
 	return button
 
 func _try_capture() -> void:

@@ -60,14 +60,18 @@ jobs:
 
           preset = cfg[section]
           opts = cfg[options]
+
+          def value(section_data, key, default=""):
+              return section_data.get(key, default).strip().strip('"')
+
           checks = {
-              "platform is Android": preset.get("platform") == "Android",
-              "APK output path is configured": preset.get("export_path", "").endswith(".apk"),
+              "platform is Android": value(preset, "platform") == "Android",
+              "APK output path is configured": value(preset, "export_path").endswith(".apk"),
               "package identifier is valid": bool(re.fullmatch(
-                  r"[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+", opts.get("package/unique_name", "")
+                  r"[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+", value(opts, "package/unique_name")
               )),
               "version code is positive": opts.getint("version/code", fallback=0) > 0,
-              "version name is present": bool(opts.get("version/name", "").strip()),
+              "version name is present": bool(value(opts, "version/name").strip()),
               "arm64-v8a is enabled": opts.getboolean("architectures/arm64-v8a", fallback=False),
               "at least one Android architecture is enabled": any(
                   opts.getboolean(f"architectures/{arch}", fallback=False)
@@ -76,8 +80,8 @@ jobs:
               "Gradle build is disabled (prebuilt template)": not opts.getboolean(
                   "gradle_build/use_gradle_build", fallback=True
               ),
-              "no custom template paths are configured": not opts.get("custom_template/debug", "").strip()
-                  and not opts.get("custom_template/release", "").strip(),
+              "no custom template paths are configured": not value(opts, "custom_template/debug").strip()
+                  and not value(opts, "custom_template/release").strip(),
               "legacy/unsupported orientation preset key is absent": "screen/orientation" not in opts,
           }
 

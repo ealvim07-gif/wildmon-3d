@@ -1,0 +1,64 @@
+name: Validate Wildmon 3D world
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-world:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Download Godot 4.4.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 \
+            "https://github.com/godotengine/godot/releases/download/4.4.1-stable/Godot_v4.4.1-stable_linux.x86_64.zip" \
+            --output "$RUNNER_TEMP/godot.zip"
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP"
+          GODOT="$RUNNER_TEMP/Godot_v4.4.1-stable_linux.x86_64"
+          chmod +x "$GODOT"
+          "$GODOT" --version
+          echo "GODOT=$GODOT" >> "$GITHUB_ENV"
+
+      - name: Download CC0 nature assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x scripts/fetch_world_assets.sh
+          scripts/fetch_world_assets.sh
+
+      - name: Install Terrain3D Android and Linux binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x scripts/fetch_terrain3d.sh
+          scripts/fetch_terrain3d.sh
+
+      - name: Import project and validate GDExtension
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$GODOT" --headless --editor --path "$GITHUB_WORKSPACE" --quit 2>&1 | tee "$RUNNER_TEMP/import.log"
+          if grep -E "SCRIPT ERROR|Parse Error|GDExtension.*(failed|error)|Failed to load" "$RUNNER_TEMP/import.log"; then
+            echo "Godot import reported a project or extension error."
+            exit 1
+          fi
+
+      - name: Launch world headlessly
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" --quit-after 12 2>&1 | tee "$RUNNER_TEMP/runtime.log"
+          if grep -E "SCRIPT ERROR|Parse Error|ERROR:|GDExtension.*(failed|error)|Failed to load" "$RUNNER_TEMP/runtime.log"; then
+            echo "Runtime validation reported an error."
+            exit 1
+          fi

@@ -1,6 +1,8 @@
 name: Probe Terrain3D Android compatibility
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:

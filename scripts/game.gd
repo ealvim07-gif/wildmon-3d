@@ -24,6 +24,7 @@ var target_look_pitch := 0.28
 const CAMERA_SENSITIVITY := 0.0019
 var nature_model_cache: Dictionary = {}
 var status_label: Label
+var variant_label: Label
 var capture_button: Button
 var touch_left := false
 var touch_right := false
@@ -34,9 +35,9 @@ var camera_drag_active := false
 func _ready() -> void:
 	_build_world()
 	_build_player()
-	_build_creature()
 	_build_ui()
 	_load_collection()
+	_build_creature()
 	_update_status("Explore o vale e encontre uma criatura!")
 
 func _input(event: InputEvent) -> void:
@@ -851,6 +852,7 @@ func _build_creature() -> void:
 		highlight_color = Color(0.67, 0.39, 0.78)
 		flame_color = Color(0.91, 0.42, 0.70)
 		tip_color = Color(1.0, 0.78, 0.90)
+	_update_variant_label(variant)
 	_add_faceted_part(creature, Vector3(0, 0.00, 0), Vector3(0.68, 0.40, 0.48), body_color)
 	_add_faceted_part(creature, Vector3(0, 0.29, 0.35), Vector3(0.38, 0.37, 0.34), highlight_color)
 	var muzzle := MeshInstance3D.new()
@@ -928,6 +930,11 @@ func _build_ui() -> void:
 	collection_label.add_theme_color_override("font_color", Color(1.0, 0.78, 0.42))
 	collection_label.text = "BRASAFOFOS CAPTURADOS: 0"
 	vbox.add_child(collection_label)
+	variant_label = Label.new()
+	variant_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	variant_label.add_theme_font_size_override("font_size", 11)
+	variant_label.add_theme_color_override("font_color", Color(0.70, 0.88, 1.0))
+	vbox.add_child(variant_label)
 
 	var controls := HBoxContainer.new()
 	controls.anchor_left = 0.025
@@ -1059,6 +1066,13 @@ func _choose_creature_spawn() -> Vector3:
 		spawn.x = spawn_x
 		spawn.y = _terrain_height(spawn_x, spawn_z) + 0.72
 	return spawn
+
+
+func _update_variant_label(variant: int) -> void:
+	if variant_label == null:
+		return
+	var names := ["BRASAFOFO • FOGO", "BRASAFOFO • GELO", "BRASAFOFO • MÍSTICO"]
+	variant_label.text = "APARÊNCIA ENCONTRADA: " + names[variant]
 
 func _load_collection() -> void:
 	var save_data := ConfigFile.new()

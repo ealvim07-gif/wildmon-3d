@@ -8,7 +8,7 @@ var player: CharacterBody3D
 var camera: Camera3D
 var creature: Node3D
 var creature_captured := false
-var move_vector := Vector2.ZERO
+var creature_in_range := false
 var look_yaw := 0.0
 var status_label: Label
 var capture_button: Button
@@ -34,10 +34,13 @@ func _process(delta: float) -> void:
 	if creature and not creature_captured:
 		creature.rotate_y(delta * 0.8)
 		creature.position.y = 0.75 + sin(Time.get_ticks_msec() * 0.002) * 0.12
-		if player.global_position.distance_to(creature.global_position) < 3.0:
-			_update_status("Uma criatura selvagem apareceu! Toque em CAPTURAR.")
-		else:
-			_update_status("Explore o vale e encontre uma criatura!")
+		var now_in_range := player.global_position.distance_to(creature.global_position) < 3.0
+		if now_in_range != creature_in_range:
+			creature_in_range = now_in_range
+			if creature_in_range:
+				_update_status("Uma criatura selvagem apareceu! Toque em CAPTURAR.")
+			else:
+				_update_status("Explore o vale e encontre uma criatura!")
 
 func _physics_process(delta: float) -> void:
 	if player == null:
@@ -57,6 +60,13 @@ func _physics_process(delta: float) -> void:
 	else:
 		player.velocity.y = 0
 	player.move_and_slide()
+	var bounded_position := player.global_position
+	bounded_position.x = clampf(bounded_position.x, -33.0, 33.0)
+	bounded_position.z = clampf(bounded_position.z, -33.0, 33.0)
+	if bounded_position != player.global_position:
+		player.global_position = bounded_position
+		player.velocity.x = 0.0
+		player.velocity.z = 0.0
 	if direction.length() > 0.1:
 		player.rotation.y = lerp_angle(player.rotation.y, atan2(direction.x, direction.z) + PI, min(delta * TURN_SPEED, 1.0))
 
@@ -95,6 +105,15 @@ func _add_tree(pos: Vector3) -> void:
 	trunk.position = pos + Vector3(0, 0.85, 0)
 	trunk.material_override = _mat(Color(0.34, 0.22, 0.12))
 	add_child(trunk)
+	var trunk_body := StaticBody3D.new()
+	trunk_body.position = pos + Vector3(0, 0.85, 0)
+	add_child(trunk_body)
+	var trunk_collision := CollisionShape3D.new()
+	var trunk_shape := CylinderShape3D.new()
+	trunk_shape.radius = 0.25
+	trunk_shape.height = 1.7
+	trunk_collision.shape = trunk_shape
+	trunk_body.add_child(trunk_collision)
 	var crown := MeshInstance3D.new()
 	var crown_mesh := SphereMesh.new()
 	crown_mesh.radius = 1.0
@@ -233,8 +252,13 @@ func _make_button(text_value: String) -> Button:
 	return button
 
 func _try_capture() -> void:
+	if player == null:
+		return
 	if creature_captured:
 		_update_status("Você já capturou o Brasafofo! Beta concluída.")
+		return
+	if creature == null or not is_instance_valid(creature):
+		_update_status("Não há criatura disponível para capturar.")
 		return
 	if player.global_position.distance_to(creature.global_position) > 3.5:
 		_update_status("Chegue mais perto da criatura para capturá-la.")

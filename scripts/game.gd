@@ -140,11 +140,11 @@ func _build_world() -> void:
 
 	_build_terrain()
 	var ground_body := StaticBody3D.new()
-	ground_body.position.y = -0.42
+	ground_body.position.y = -4.5
 	add_child(ground_body)
 	var ground_shape := CollisionShape3D.new()
 	var ground_box := BoxShape3D.new()
-	ground_box.size = Vector3(78, 0.6, 78)
+	ground_box.size = Vector3(78, 1.0, 78)
 	ground_shape.shape = ground_box
 	ground_body.add_child(ground_shape)
 
@@ -285,6 +285,16 @@ func _build_terrain() -> void:
 	terrain.material_override = _terrain_material()
 	add_child(terrain)
 
+	# Colisão segue a malha real do relevo; o chão plano fica apenas como segurança distante.
+	var terrain_body := StaticBody3D.new()
+	terrain_body.name = "TerrainCollision"
+	add_child(terrain_body)
+	var terrain_collision := CollisionShape3D.new()
+	var terrain_shape := ConcavePolygonShape3D.new()
+	terrain_shape.set_faces(terrain.mesh.get_faces())
+	terrain_collision.shape = terrain_shape
+	terrain_body.add_child(terrain_collision)
+
 func _terrain_material() -> ShaderMaterial:
 	var shader := Shader.new()
 	shader.code = """
@@ -325,12 +335,15 @@ void fragment() {
 	return material
 
 func _terrain_height(x: float, z: float) -> float:
-	var edge_factor := clampf((maxf(absf(x), absf(z)) - 8.0) / 28.0, 0.0, 1.0)
-	var rolling := sin(x * 0.15 + z * 0.075) * 0.82 + cos(z * 0.13 - x * 0.055) * 0.62
-	var detail := sin(x * 0.39 + z * 0.21) * 0.12 + cos(z * 0.31 - x * 0.17) * 0.10
-	var ridge_a := exp(-pow((x + 25.0) / 9.0, 2.0) - pow((z + 7.0) / 24.0, 2.0)) * 2.6
-	var ridge_b := exp(-pow((x - 27.0) / 10.0, 2.0) - pow((z - 8.0) / 22.0, 2.0)) * 2.2
-	return maxf(-0.12, (rolling + detail + ridge_a + ridge_b) * edge_factor)
+	var edge_factor := clampf((maxf(absf(x), absf(z)) - 4.0) / 25.0, 0.0, 1.0)
+	# Ondas cruzadas e cristas alongadas quebram o padrão de colinas circulares.
+	var rolling := sin(x * 0.105 + z * 0.072) * 0.62 + cos(z * 0.091 - x * 0.063) * 0.48
+	var warped_x := x + sin(z * 0.075) * 3.2
+	var ridge_a := pow(1.0 - absf(sin((warped_x + z * 0.22) * 0.082)), 2.2) * 1.55
+	var ridge_b := pow(1.0 - absf(sin((x * 0.17 - z * 0.31 + 11.0) * 0.071)), 2.8) * 0.92
+	var detail := sin(x * 0.31 + z * 0.19) * 0.16 + cos(z * 0.27 - x * 0.23) * 0.13
+	var erosion := -absf(sin(x * 0.045 + z * 0.031)) * 0.24
+	return maxf(-0.28, (rolling + ridge_a + ridge_b + detail + erosion) * edge_factor)
 
 func _add_rock(pos: Vector3, seed: int) -> void:
 	var rock_scene := _get_nature_scene(["Rock_Medium_1", "Rock_Medium_2"], seed)

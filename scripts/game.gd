@@ -36,6 +36,7 @@ func _ready() -> void:
 	_build_player()
 	_build_creature()
 	_build_ui()
+	_load_collection()
 	_update_status("Explore o vale e encontre uma criatura!")
 
 func _input(event: InputEvent) -> void:
@@ -1002,6 +1003,7 @@ func _try_capture() -> void:
 		return
 	creature_captured = true
 	captured_count += 1
+	_save_collection()
 	if collection_label:
 		collection_label.text = "BRASAFOFOS CAPTURADOS: " + str(captured_count)
 	var captured_creature := creature
@@ -1028,6 +1030,21 @@ func _schedule_creature_respawn() -> void:
 		capture_button.disabled = false
 		capture_button.text = "CAPTURAR"
 	_update_status("Outra criatura apareceu no vale! Continue explorando.")
+
+func _load_collection() -> void:
+	var save_data := ConfigFile.new()
+	var load_error := save_data.load("user://wildmon_save.cfg")
+	if load_error == OK:
+		captured_count = int(save_data.get_value("collection", "brasafofo_count", 0))
+	if collection_label:
+		collection_label.text = "BRASAFOFOS CAPTURADOS: " + str(captured_count)
+
+func _save_collection() -> void:
+	var save_data := ConfigFile.new()
+	save_data.set_value("collection", "brasafofo_count", captured_count)
+	var save_error := save_data.save("user://wildmon_save.cfg")
+	if save_error != OK:
+		push_warning("Não foi possível salvar a coleção: " + str(save_error))
 
 func _update_status(message: String) -> void:
 	if status_label:

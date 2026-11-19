@@ -837,10 +837,10 @@ func _build_creature() -> void:
 	add_child(creature)
 	# Variações visuais alternadas para a coleção.
 	var variant := captured_count % 3
-	var body_color := body_color
-	var highlight_color := highlight_color
-	var flame_color := flame_color
-	var tip_color := tip_color
+	var body_color: Color = Color(0.72, 0.17, 0.045)
+	var highlight_color: Color = Color(0.91, 0.29, 0.055)
+	var flame_color: Color = Color(1.0, 0.43, 0.025)
+	var tip_color: Color = Color(1.0, 0.86, 0.30)
 	if variant == 1:
 		body_color = Color(0.20, 0.39, 0.68)
 		highlight_color = Color(0.30, 0.61, 0.88)

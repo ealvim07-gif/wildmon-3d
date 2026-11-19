@@ -53,6 +53,13 @@ jobs:
             exit 1
           fi
 
+      - name: Run terrain and sky diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" --script res://scripts/terrain_sky_diagnostics.gd 2>&1 | tee "$RUNNER_TEMP/terrain-diagnostics.log"
+          grep -q "WORLD_DIAGNOSTICS_OK" "$RUNNER_TEMP/terrain-diagnostics.log"
+
       - name: Launch world headlessly
         shell: bash
         run: |

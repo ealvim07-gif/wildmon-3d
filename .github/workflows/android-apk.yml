@@ -1,6 +1,8 @@
 name: Build Wildmon 3D Android Beta APK
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -98,12 +100,21 @@ jobs:
           chmod +x scripts/fetch_terrain3d.sh
           scripts/fetch_terrain3d.sh
 
+      - name: Import project and register Terrain3D classes
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$GODOT" --headless --editor --path "$GITHUB_WORKSPACE" --quit 2>&1 | tee "$RUNNER_TEMP/import.log"
+          if grep -E "SCRIPT ERROR|Parse Error|GDExtension.*(failed|error)|Failed to load" "$RUNNER_TEMP/import.log"; then
+            echo "Godot import reported a project or extension error."
+            exit 1
+          fi
+
       - name: Validate project scripts and resources
         shell: bash
         run: |
           set -euo pipefail
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" --check-only --script res://scripts/game.gd
-          "$GODOT" --headless --path "$GITHUB_WORKSPACE" --editor --quit
 
       - name: Create temporary debug signing key
         shell: bash

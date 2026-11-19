@@ -271,7 +271,9 @@ func _build_terrain() -> void:
 	terrain.region_size = 256
 	terrain.mesh_lods = 6
 	terrain.mesh_size = 32
-	terrain.collision.mode = Terrain3DCollision.DYNAMIC_GAME
+	terrain.collision.mode = Terrain3DCollision.FULL_GAME
+	add_child(terrain)
+
 	terrain.material.world_background = Terrain3DMaterial.NONE
 	terrain.material.auto_shader = true
 	terrain.material.set_shader_param("auto_slope", 18.0)
@@ -293,7 +295,6 @@ func _build_terrain() -> void:
 			var world_z := float(z) - 128.0
 			height_map.set_pixel(x, z, Color(_terrain_height(world_x, world_z) / 3.5, 0.0, 0.0, 1.0))
 	terrain.data.import_images([height_map, null, null], Vector3(-128.0, 0.0, -128.0), 0.0, 3.5)
-	add_child(terrain)
 
 func _make_terrain_texture(asset_name: String, base_color: Color, accent_color: Color, noise_seed: int) -> Terrain3DTextureAsset:
 	var noise := FastNoiseLite.new()

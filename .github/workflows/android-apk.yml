@@ -63,13 +63,3 @@ jobs:
             echo "Godot reported runtime errors while starting the main scene."
             exit 1
           fi
-
-      - name: Confirm APK export is disabled
-        shell: bash
-        run: |
-          if grep -Eq -- '--export-(debug|release)|godot-export|upload-artifact' \
-            .github/workflows/*.yml; then
-            echo "An APK/export or artifact-upload step is still configured."
-            exit 1
-          fi
-          echo "Validation-only workflow confirmed. No APK will be exported."

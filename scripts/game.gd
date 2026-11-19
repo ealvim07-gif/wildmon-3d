@@ -1,5 +1,73 @@
 extends Node3D
 
+class AnalogStick extends Control:
+	signal value_changed(value: Vector2)
+	var pointer_index := -1
+	var stick_value := Vector2.ZERO
+	var knob_position := Vector2.ZERO
+	var active := false
+
+	func _ready() -> void:
+		custom_minimum_size = Vector2(184, 184)
+		mouse_filter = Control.MOUSE_FILTER_STOP
+		knob_position = size * 0.5
+		queue_redraw()
+
+	func _notification(what: int) -> void:
+		if what == NOTIFICATION_RESIZED:
+			if not active:
+				knob_position = size * 0.5
+			queue_redraw()
+
+	func _gui_input(event: InputEvent) -> void:
+		if event is InputEventScreenTouch:
+			if event.pressed and pointer_index == -1:
+				pointer_index = event.index
+				active = true
+				_update_stick(event.position)
+			elif not event.pressed and event.index == pointer_index:
+				pointer_index = -1
+				_reset_stick()
+		elif event is InputEventScreenDrag and event.index == pointer_index:
+			_update_stick(event.position)
+		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+			if event.pressed:
+				active = true
+				_update_stick(event.position)
+			else:
+				_reset_stick()
+		elif event is InputEventMouseMotion and active and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+			_update_stick(event.position)
+
+	func _update_stick(pointer: Vector2) -> void:
+		var center := size * 0.5
+		var radius := minf(size.x, size.y) * 0.34
+		var offset := pointer - center
+		if offset.length() > radius:
+			offset = offset.normalized() * radius
+		knob_position = center + offset
+		stick_value = Vector2(offset.x / radius, offset.y / radius)
+		if stick_value.length() > 1.0:
+			stick_value = stick_value.normalized()
+		value_changed.emit(stick_value)
+		queue_redraw()
+
+	func _reset_stick() -> void:
+		active = false
+		stick_value = Vector2.ZERO
+		knob_position = size * 0.5
+		value_changed.emit(stick_value)
+		queue_redraw()
+
+	func _draw() -> void:
+		var center := size * 0.5
+		var radius := minf(size.x, size.y) * 0.43
+		draw_circle(center, radius, Color(0.025, 0.065, 0.07, 0.58))
+		draw_arc(center, radius, 0.0, TAU, 64, Color(0.62, 0.78, 0.64, 0.88), 3.0, true)
+		draw_circle(center, radius * 0.64, Color(0.35, 0.49, 0.39, 0.20))
+		draw_circle(knob_position, radius * 0.48, Color(0.67, 0.82, 0.67, 0.94))
+		draw_arc(knob_position, radius * 0.48, 0.0, TAU, 48, Color(0.93, 0.98, 0.86, 0.95), 2.0, true)
+
 const MOVE_SPEED := 5.2
 const TURN_SPEED := 10.0
 const CAMERA_DISTANCE := 6.5
@@ -30,10 +98,8 @@ var nature_model_cache: Dictionary = {}
 var status_label: Label
 var variant_label: Label
 var capture_button: Button
-var touch_left := false
-var touch_right := false
-var touch_forward := false
-var touch_back := false
+var movement_input := Vector2.ZERO
+var movement_stick: AnalogStick
 var camera_drag_active := false
 var camera_touch_index := -1
 
@@ -51,7 +117,7 @@ func _input(event: InputEvent) -> void:
 		if event.pressed:
 			# A câmera usa somente a área livre do lado direito, sem disputar
 			# os botões de movimento e captura na parte inferior.
-			var in_camera_area := event.position.x > screen_size.x * 0.44
+			var in_camera_area: bool = event.position.x > screen_size.x * 0.44
 			in_camera_area = in_camera_area and event.position.y > screen_size.y * 0.17
 			in_camera_area = in_camera_area and event.position.y < screen_size.y * 0.66
 			if in_camera_area and camera_touch_index == -1:
@@ -117,9 +183,7 @@ func _process(delta: float) -> void:
 func _physics_process(delta: float) -> void:
 	if player == null:
 		return
-	var x := float(touch_right) - float(touch_left)
-	var z := float(touch_back) - float(touch_forward)
-	var input_dir := Vector2(x, z)
+	var input_dir := Vector2(movement_input.x, -movement_input.y)
 	if input_dir.length() > 1.0:
 		input_dir = input_dir.normalized()
 	var forward := Vector3(sin(look_yaw), 0, cos(look_yaw))
@@ -1064,49 +1128,36 @@ func _build_ui() -> void:
 	variant_label.add_theme_color_override("font_color", Color(0.70, 0.88, 1.0))
 	vbox.add_child(variant_label)
 
-	var controls := HBoxContainer.new()
-	controls.anchor_left = 0.025
-	controls.anchor_top = 0.69
-	controls.anchor_right = 0.975
-	controls.anchor_bottom = 0.975
-	controls.alignment = BoxContainer.ALIGNMENT_CENTER
-	controls.add_theme_constant_override("separation", 12)
-	layer.add_child(controls)
+	# Analógico grande no canto inferior esquerdo, com área de toque generosa.
+	movement_stick = AnalogStick.new()
+	movement_stick.anchor_left = 0.025
+	movement_stick.anchor_top = 1.0
+	movement_stick.anchor_right = 0.025
+	movement_stick.anchor_bottom = 1.0
+	movement_stick.offset_left = 0
+	movement_stick.offset_top = -204
+	movement_stick.offset_right = 184
+	movement_stick.offset_bottom = -20
+	movement_stick.value_changed.connect(func(value: Vector2): movement_input = value)
+	layer.add_child(movement_stick)
 
-	var left_col := VBoxContainer.new()
-	left_col.add_theme_constant_override("separation", 3)
-	controls.add_child(left_col)
-	var up := _make_button("▲")
-	left_col.add_child(up)
-	up.button_down.connect(func(): touch_forward = true)
-	up.button_up.connect(func(): touch_forward = false)
-	var middle := HBoxContainer.new()
-	middle.add_theme_constant_override("separation", 3)
-	left_col.add_child(middle)
-	var left := _make_button("◀")
-	middle.add_child(left)
-	left.button_down.connect(func(): touch_left = true)
-	left.button_up.connect(func(): touch_left = false)
-	var down := _make_button("▼")
-	middle.add_child(down)
-	down.button_down.connect(func(): touch_back = true)
-	down.button_up.connect(func(): touch_back = false)
-	var right := _make_button("▶")
-	middle.add_child(right)
-	right.button_down.connect(func(): touch_right = true)
-	right.button_up.connect(func(): touch_right = false)
-
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	controls.add_child(spacer)
+	# Captura fica separada do analógico e maior para facilitar o toque.
 	capture_button = _make_button("CAPTURAR")
-	capture_button.custom_minimum_size = Vector2(148, 62)
-	capture_button.add_theme_font_size_override("font_size", 16)
+	capture_button.anchor_left = 1.0
+	capture_button.anchor_top = 1.0
+	capture_button.anchor_right = 1.0
+	capture_button.anchor_bottom = 1.0
+	capture_button.offset_left = -184
+	capture_button.offset_top = -112
+	capture_button.offset_right = -20
+	capture_button.offset_bottom = -28
+	capture_button.custom_minimum_size = Vector2(164, 84)
+	capture_button.add_theme_font_size_override("font_size", 18)
 	var capture_style := StyleBoxFlat.new()
 	capture_style.bg_color = Color(0.70, 0.25, 0.09, 0.96)
 	capture_style.border_color = Color(1.0, 0.72, 0.38)
 	capture_style.set_border_width_all(2)
-	capture_style.set_corner_radius_all(12)
+	capture_style.set_corner_radius_all(16)
 	capture_button.add_theme_stylebox_override("normal", capture_style)
 	var capture_hover := capture_style.duplicate()
 	capture_hover.bg_color = Color(0.86, 0.34, 0.11, 1.0)
@@ -1116,12 +1167,12 @@ func _build_ui() -> void:
 	capture_button.add_theme_stylebox_override("pressed", capture_pressed)
 	capture_button.add_theme_color_override("font_color", Color(1.0, 0.96, 0.87))
 	capture_button.pressed.connect(_try_capture)
-	controls.add_child(capture_button)
+	layer.add_child(capture_button)
 
 func _make_button(text_value: String) -> Button:
 	var button := Button.new()
 	button.text = text_value
-	button.custom_minimum_size = Vector2(54, 54)
+	button.custom_minimum_size = Vector2(76, 76)
 	button.add_theme_font_size_override("font_size", 18)
 	button.add_theme_color_override("font_color", Color(0.91, 0.95, 0.88))
 	button.focus_mode = Control.FOCUS_NONE

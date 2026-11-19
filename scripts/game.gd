@@ -199,7 +199,7 @@ func _add_tree(pos: Vector3) -> void:
 		[Vector3(0.05, 3.25, 0.12), 0.78]
 	]:
 		var crown := MeshInstance3D.new()
-		var crown_mesh := ConeMesh.new()
+		var crown_mesh := CylinderMesh.new()
 		crown_mesh.top_radius = 0.08
 		crown_mesh.bottom_radius = crown_data[1]
 		crown_mesh.height = crown_data[1] * 2.0

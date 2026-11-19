@@ -255,8 +255,8 @@ func _build_world() -> void:
 	env.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
 	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.22, 0.43, 0.72)
-	sky_mat.sky_horizon_color = Color(0.76, 0.86, 0.91)
+	sky_mat.sky_top_color = Color(0.20, 0.48, 0.82)
+	sky_mat.sky_horizon_color = Color(0.79, 0.89, 0.96)
 	sky_mat.ground_bottom_color = Color(0.28, 0.34, 0.27)
 	sky_mat.ground_horizon_color = Color(0.62, 0.70, 0.56)
 	sky_mat.sun_angle_max = 24.0
@@ -265,12 +265,12 @@ func _build_world() -> void:
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ambient_light_color = Color(0.78, 0.84, 0.91)
-	env.ambient_light_energy = 0.95
+	env.ambient_light_energy = 1.08
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.22
+	env.tonemap_exposure = 1.30
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.65, 0.75, 0.78)
-	env.fog_density = 0.0022
+	env.fog_light_color = Color(0.72, 0.82, 0.86)
+	env.fog_density = 0.0015
 	env.fog_sky_affect = 0.62
 	env.adjustment_enabled = true
 	env.adjustment_saturation = 1.08
@@ -279,7 +279,7 @@ func _build_world() -> void:
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-42, -32, 0)
-	sun.light_energy = 1.45
+	sun.light_energy = 1.65
 	sun.light_color = Color(1.0, 0.91, 0.78)
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 52.0
@@ -305,7 +305,7 @@ func _build_world() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 81027
 	# Bosques em manchas irregulares, com árvores isoladas entre os grupos.
-	var grove_centers := [Vector2(-43.0, -39.0), Vector2(43.0, -37.0), Vector2(-46.0, 39.0), Vector2(45.0, 40.0)]
+	var grove_centers := [Vector2(-31.0, -29.0), Vector2(31.0, -29.0), Vector2(-34.0, 34.0), Vector2(34.0, 34.0)]
 	for i in range(68):
 		var px: float
 		var pz: float
@@ -346,7 +346,7 @@ func _build_world() -> void:
 
 func _build_biome_ground_cover(rng: RandomNumberGenerator) -> void:
 	# Sub-bosque em manchas: vegetação baixa acompanha as copas, sem cobrir tudo.
-	var forest_centers := [Vector2(-43.0, -39.0), Vector2(43.0, -37.0), Vector2(-46.0, 39.0), Vector2(45.0, 40.0)]
+	var forest_centers := [Vector2(-31.0, -29.0), Vector2(31.0, -29.0), Vector2(-34.0, 34.0), Vector2(34.0, 34.0)]
 	for center_index in range(forest_centers.size()):
 		var center: Vector2 = forest_centers[center_index]
 		for i in range(12):
@@ -391,7 +391,7 @@ func _build_biome_floor_patches() -> void:
 	# As malhas seguem o relevo e têm bordas orgânicas, sem círculos perfeitos.
 	var forest_centers := [Vector2(-43.0, -39.0), Vector2(43.0, -37.0), Vector2(-46.0, 39.0), Vector2(45.0, 40.0)]
 	for i in range(forest_centers.size()):
-		_add_biome_floor_patch(forest_centers[i], 10.5, 8.2, Color(0.19, 0.24, 0.12), 210 + i)
+		_add_biome_floor_patch(forest_centers[i], 11.5, 9.0, Color(0.23, 0.29, 0.15), 210 + i)
 	var meadow_centers := [Vector2(-37.0, 8.0), Vector2(35.0, 28.0)]
 	for i in range(meadow_centers.size()):
 		_add_biome_floor_patch(meadow_centers[i], 8.6, 6.4, Color(0.31, 0.39, 0.17), 230 + i)
@@ -813,10 +813,10 @@ func _build_terrain() -> void:
 	add_child(terrain_body)
 
 func _terrain_vertex_color(x: float, z: float, height: float, noise: FastNoiseLite) -> Color:
-	var variation := noise.get_noise_2d(x, z) * 0.045
-	var lowland := Color(0.27, 0.39, 0.19)
-	var hillside := Color(0.36, 0.43, 0.23)
-	var rocky := Color(0.43, 0.42, 0.35)
+	var variation := noise.get_noise_2d(x, z) * 0.075 + sin(x * 0.21 + z * 0.16) * 0.018
+	var lowland := Color(0.31, 0.43, 0.23)
+	var hillside := Color(0.39, 0.47, 0.27)
+	var rocky := Color(0.47, 0.45, 0.38)
 	var color := lowland.lerp(hillside, clampf((height - 0.25) / 1.35, 0.0, 1.0))
 	color = color.lerp(rocky, clampf((height - 1.8) / 1.0, 0.0, 0.72))
 	color += Color(variation, variation, variation * 0.72, 0.0)
@@ -868,7 +868,7 @@ func _make_terrain_texture(asset_name: String, base_color: Color, accent_color: 
 	return asset
 
 func _terrain_height(x: float, z: float) -> float:
-	var edge_factor := clampf((maxf(absf(x), absf(z)) - 4.0) / 25.0, 0.0, 1.0)
+	var edge_factor := clampf((maxf(absf(x), absf(z)) - 2.0) / 23.0, 0.0, 1.0)
 	# Relevo com cristas compridas, ombros assimétricos e pequenos vales de erosão.
 	var rolling := sin(x * 0.105 + z * 0.072) * 0.48 + cos(z * 0.091 - x * 0.063) * 0.38
 	var warped_x := x + sin(z * 0.075) * 3.2 + cos(z * 0.031) * 2.1
@@ -878,7 +878,7 @@ func _terrain_height(x: float, z: float) -> float:
 	var drainage := -pow(maxf(0.0, 1.0 - absf(sin(x * 0.052 + z * 0.12 + sin(z * 0.04) * 1.3))), 5.0) * 0.62
 	var detail := sin(x * 0.31 + z * 0.19) * 0.19 + cos(z * 0.27 - x * 0.23) * 0.15
 	var erosion := -absf(sin(x * 0.045 + z * 0.031)) * 0.30
-	return maxf(-0.32, (rolling + ridge_a + ridge_b + shoulder + drainage + detail + erosion) * edge_factor)
+	return maxf(-0.32, (rolling * 0.82 + ridge_a + ridge_b + shoulder + drainage + detail + erosion) * maxf(edge_factor, 0.28))
 
 func _add_reed(pos: Vector3, seed: int) -> void:
 	var reed_scene := _get_nature_scene(["Reed001", "Reed002"], seed)
@@ -899,7 +899,7 @@ func _add_rock(pos: Vector3, seed: int) -> void:
 		var rock := rock_scene.instantiate() as Node3D
 		add_child(rock)
 		rock.position = pos
-		rock.scale = Vector3.ONE * (0.62 + float(seed % 5) * 0.13)
+		rock.scale = Vector3.ONE * (0.48 + float(seed % 5) * 0.075)
 		rock.rotation.y = float(seed * 37 % 360) * PI / 180.0
 		return
 	# Fallback usado apenas se a transferência dos modelos não estiver disponível.
@@ -941,7 +941,7 @@ func _add_tree(pos: Vector3, seed: int) -> void:
 		add_child(tree)
 		_set_scene_visibility_range(tree, 108.0)
 		tree.position = pos
-		var scale_factor := 0.78 + float(seed % 5) * 0.11
+		var scale_factor := 0.88 + float(seed % 5) * 0.12
 		tree.scale = Vector3.ONE * scale_factor
 		tree.rotation.y = float(seed * 53 % 360) * PI / 180.0
 		var trunk_body := StaticBody3D.new()
@@ -1005,7 +1005,7 @@ func _add_plant(pos: Vector3, seed: int) -> void:
 		add_child(plant)
 		_set_scene_visibility_range(plant, 58.0)
 		plant.position = pos
-		var scale_factor := 0.30 + float(seed % 5) * 0.10
+		var scale_factor := 0.42 + float(seed % 5) * 0.11
 		plant.scale = Vector3.ONE * scale_factor
 		plant.rotation.y = float(seed * 41 % 360) * PI / 180.0
 		_register_foliage_sway(plant, seed, 0.045)

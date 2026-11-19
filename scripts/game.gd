@@ -98,7 +98,7 @@ var look_yaw := 0.0
 var target_look_yaw := 0.0
 var look_pitch := 0.28
 var target_look_pitch := 0.28
-const CAMERA_SENSITIVITY := 0.0019
+const CAMERA_SENSITIVITY := 0.00155
 var nature_model_cache: Dictionary = {}
 var status_label: Label
 var variant_label: Label

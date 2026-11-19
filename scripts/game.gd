@@ -206,6 +206,21 @@ func _build_biome_details(rng: RandomNumberGenerator) -> void:
 			var pz := center.y + sin(angle) * radius
 			_add_rock(Vector3(px, _terrain_height(px, pz), pz), 180 + center_index * 17 + i)
 
+	# Paredões baixos de rocha nas bordas do vale, usando os modelos de penhasco CC0.
+	var cliff_points := [
+		[Vector2(57.0, 13.0), 0.92, 0.35],
+		[Vector2(-58.0, -12.0), 0.82, 1.10],
+		[Vector2(18.0, 57.0), 0.88, 2.05],
+		[Vector2(-19.0, -58.0), 0.76, 2.70]
+	]
+	for i in range(cliff_points.size()):
+		var cliff_data: Array = cliff_points[i]
+		var cliff_pos: Vector2 = cliff_data[0]
+		_add_cliff(
+			Vector3(cliff_pos.x, _terrain_height(cliff_pos.x, cliff_pos.y) - 0.12, cliff_pos.y),
+			float(cliff_data[1]), float(cliff_data[2]), 760 + i
+		)
+
 	# Clareiras floridas com bordas irregulares e vegetação baixa.
 	var meadow_centers := [Vector2(-37.0, 8.0), Vector2(35.0, 28.0)]
 	for center_index in range(meadow_centers.size()):
@@ -258,6 +273,18 @@ func _build_biome_details(rng: RandomNumberGenerator) -> void:
 			Vector3(finish.x, _terrain_height(finish.x, finish.y), finish.y),
 			float(log_data[2]), 700 + i
 		)
+
+func _add_cliff(pos: Vector3, scale_factor: float, yaw: float, seed: int) -> void:
+	var cliff_scene := _get_nature_scene(["Cliff001", "Cliff002"], seed)
+	if cliff_scene:
+		var cliff := cliff_scene.instantiate() as Node3D
+		add_child(cliff)
+		cliff.position = pos
+		cliff.scale = Vector3(scale_factor * 1.15, scale_factor, scale_factor * 0.82)
+		cliff.rotation.y = yaw
+		return
+	# Alternativa facetada caso os modelos externos não estejam disponíveis.
+	_add_rock(pos, seed)
 
 func _add_fern(pos: Vector3, seed: int) -> void:
 	var fern_scene := _get_nature_scene(["Fern_1", "Bush_Common", "Bush001"], seed)

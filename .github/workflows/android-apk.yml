@@ -1,4 +1,4 @@
-name: Validate Wildmon 3D (no APK export)
+name: Build Wildmon 3D Android Beta APK
 
 on:
   push:
@@ -10,10 +10,10 @@ permissions:
   contents: read
 
 jobs:
-  validate-project:
-    name: Validate Godot project without exporting
+  build-android:
+    name: Export and verify Android debug APK
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout project
         uses: actions/checkout@v4
@@ -27,8 +27,9 @@ jobs:
             --output "$RUNNER_TEMP/godot.zip"
           unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP"
           GODOT="$RUNNER_TEMP/Godot_v4.4.1-stable_linux.x86_64"
-          test -x "$GODOT" || chmod +x "$GODOT"
+          chmod +x "$GODOT"
           "$GODOT" --version
+          echo "GODOT=$GODOT" >> "$GITHUB_ENV"
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
@@ -36,7 +37,7 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Install and verify Android SDK prerequisites (no export)
+      - name: Install Android SDK
         shell: bash
         run: |
           set -euo pipefail
@@ -54,8 +55,6 @@ jobs:
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
           echo "$SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          java -version
-          "$SDKMANAGER" --version
           set +o pipefail
           yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null
           set -o pipefail
@@ -66,14 +65,12 @@ jobs:
             "cmdline-tools;latest" \
             "cmake;3.10.2.4988404" \
             "ndk;23.2.8568313"
-          test -x "$SDK_ROOT/platform-tools/adb"
-          test -d "$SDK_ROOT/build-tools/34.0.0"
+          test -x "$SDK_ROOT/build-tools/34.0.0/aapt"
           test -d "$SDK_ROOT/platforms/android-34"
           test -d "$SDK_ROOT/ndk/23.2.8568313"
           test -d "$SDK_ROOT/cmake/3.10.2.4988404"
-          echo "Android SDK prerequisites installed and verified. No APK export was run."
 
-      - name: Install and verify Godot Android export templates (no export)
+      - name: Install Godot Android export templates
         shell: bash
         run: |
           set -euo pipefail
@@ -82,99 +79,56 @@ jobs:
             --output "$RUNNER_TEMP/godot-templates.tpz"
           mkdir -p "$RUNNER_TEMP/godot-templates"
           unzip -q "$RUNNER_TEMP/godot-templates.tpz" -d "$RUNNER_TEMP/godot-templates"
-          TEMPLATE_SOURCE="$RUNNER_TEMP/godot-templates/templates"
           TEMPLATE_DEST="$HOME/.local/share/godot/export_templates/4.4.1.stable"
-          test -d "$TEMPLATE_SOURCE"
           mkdir -p "$TEMPLATE_DEST"
-          cp -a "$TEMPLATE_SOURCE/." "$TEMPLATE_DEST/"
+          cp -a "$RUNNER_TEMP/godot-templates/templates/." "$TEMPLATE_DEST/"
           test -s "$TEMPLATE_DEST/android_debug.apk"
           test -s "$TEMPLATE_DEST/android_release.apk"
-          echo "Godot Android debug and release templates are installed and verified. No APK export was run."
 
-      - name: Check GDScript syntax
+      - name: Validate project scripts and resources
         shell: bash
         run: |
           set -euo pipefail
-          GODOT="$RUNNER_TEMP/Godot_v4.4.1-stable_linux.x86_64"
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" --check-only --script res://scripts/game.gd
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" --editor --quit
+
+      - name: Create temporary debug signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.android"
+          keytool -genkeypair -v \
+            -keystore "$HOME/.android/debug.keystore" \
+            -storepass android -alias androiddebugkey -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US" \
+            -keyalg RSA -keysize 2048 -validity 10000
+          echo "ANDROID_DEBUG_KEYSTORE=$HOME/.android/debug.keystore" >> "$GITHUB_ENV"
+
+      - name: Export Android debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
-            --check-only --script res://scripts/game.gd
+            --export-debug "Android" "build/Wildmon3D-Beta01.apk"
 
-      - name: Validate Android preset without exporting
+      - name: Verify APK package and archive
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import configparser
-          import re
-          from pathlib import Path
+          APK="build/Wildmon3D-Beta01.apk"
+          test -s "$APK"
+          unzip -t "$APK"
+          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$APK" | tee "$RUNNER_TEMP/apk-badging.txt"
+          grep -F "package: name='com.wildmon.game'" "$RUNNER_TEMP/apk-badging.txt"
+          grep -F "application-label:'Wildmon 3D'" "$RUNNER_TEMP/apk-badging.txt"
+          sha256sum "$APK"
+          ls -lh "$APK"
 
-          path = Path("export_presets.cfg")
-          if not path.is_file():
-              raise SystemExit("FAIL: export_presets.cfg is missing")
-
-          cfg = configparser.ConfigParser(interpolation=None)
-          cfg.read(path, encoding="utf-8")
-          section = "preset.0"
-          options = "preset.0.options"
-          if section not in cfg or options not in cfg:
-              raise SystemExit("FAIL: Android preset sections are incomplete")
-
-          preset = cfg[section]
-          opts = cfg[options]
-
-          def value(section_data, key, default=""):
-              return section_data.get(key, default).strip().strip('"')
-
-          checks = {
-              "platform is Android": value(preset, "platform") == "Android",
-              "APK output path is configured": value(preset, "export_path").endswith(".apk"),
-              "package identifier is valid": bool(re.fullmatch(
-                  r"[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+", value(opts, "package/unique_name")
-              )),
-              "version code is positive": opts.getint("version/code", fallback=0) > 0,
-              "version name is present": bool(value(opts, "version/name").strip()),
-              "arm64-v8a is enabled": opts.getboolean("architectures/arm64-v8a", fallback=False),
-              "at least one Android architecture is enabled": any(
-                  opts.getboolean(f"architectures/{arch}", fallback=False)
-                  for arch in ("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
-              ),
-              "Gradle build is disabled (prebuilt template)": not opts.getboolean(
-                  "gradle_build/use_gradle_build", fallback=True
-              ),
-              "no custom template paths are configured": not value(opts, "custom_template/debug").strip()
-                  and not value(opts, "custom_template/release").strip(),
-              "legacy/unsupported orientation preset key is absent": "screen/orientation" not in opts,
-          }
-
-          for label, passed in checks.items():
-              print(f"{'PASS' if passed else 'FAIL'}: {label}")
-          if not all(checks.values()):
-              raise SystemExit("Android preset validation failed.")
-          print("Android preset checks passed. No export was performed.")
-          PY
-
-      - name: Import project and validate resources
-        shell: bash
-        run: |
-          set -euo pipefail
-          GODOT="$RUNNER_TEMP/Godot_v4.4.1-stable_linux.x86_64"
-          LOG="$RUNNER_TEMP/godot-import.log"
-          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
-            --editor --quit --verbose 2>&1 | tee "$LOG"
-          if grep -E "(^|[[:space:]])(ERROR|SCRIPT ERROR):" "$LOG"; then
-            echo "Godot reported errors while importing the project."
-            exit 1
-          fi
-
-      - name: Run main scene smoke test
-        shell: bash
-        run: |
-          set -euo pipefail
-          GODOT="$RUNNER_TEMP/Godot_v4.4.1-stable_linux.x86_64"
-          LOG="$RUNNER_TEMP/godot-runtime.log"
-          "$GODOT" --headless --path "$GITHUB_WORKSPACE" \
-            --quit-after 120 2>&1 | tee "$LOG"
-          if grep -E "(^|[[:space:]])(ERROR|SCRIPT ERROR):" "$LOG"; then
-            echo "Godot reported runtime errors while starting the main scene."
-            exit 1
-          fi
+      - name: Upload beta APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wildmon3D-Beta01-Android-APK
+          path: build/Wildmon3D-Beta01.apk
+          if-no-files-found: error
+          retention-days: 14

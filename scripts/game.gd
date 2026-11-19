@@ -105,6 +105,10 @@ var variant_label: Label
 var capture_button: Button
 var movement_input := Vector2.ZERO
 var movement_stick: AnalogStick
+var foliage_sway_nodes: Array[Node3D] = []
+var foliage_sway_base_rotations: Array[Vector3] = []
+var foliage_sway_phases: Array[float] = []
+var foliage_sway_strengths: Array[float] = []
 var camera_drag_active := false
 var camera_touch_index := -1
 
@@ -147,6 +151,16 @@ func _input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	if player == null:
 		return
+	# Brisa suave em vegetação baixa; anima apenas raízes já instanciadas.
+	var wind_time := Time.get_ticks_msec() * 0.001
+	for foliage_index in range(foliage_sway_nodes.size()):
+		var foliage := foliage_sway_nodes[foliage_index]
+		if is_instance_valid(foliage):
+			var phase := wind_time * 1.15 + foliage_sway_phases[foliage_index]
+			var base_rotation: Vector3 = foliage_sway_base_rotations[foliage_index]
+			var strength: float = foliage_sway_strengths[foliage_index]
+			foliage.rotation.x = base_rotation.x + sin(phase) * strength
+			foliage.rotation.z = base_rotation.z + cos(phase * 0.83) * strength * 0.72
 	look_yaw = lerp_angle(look_yaw, target_look_yaw, minf(delta * 5.2, 1.0))
 	look_pitch = lerpf(look_pitch, target_look_pitch, minf(delta * 7.0, 1.0))
 	var target := player.global_position + Vector3(0, 1.25, 0)
@@ -446,6 +460,7 @@ func _add_meadow_flower(pos: Vector3, seed: int) -> void:
 		var scale_factor := 0.34 + float(seed % 4) * 0.08
 		flowers.scale = Vector3.ONE * scale_factor
 		flowers.rotation.y = float(seed * 47 % 360) * PI / 180.0
+		_register_foliage_sway(flowers, seed, 0.055)
 		return
 	_add_plant(pos, seed)
 
@@ -550,6 +565,7 @@ func _add_fern(pos: Vector3, seed: int) -> void:
 		var scale_factor := 0.42 + float(seed % 5) * 0.09
 		fern.scale = Vector3.ONE * scale_factor
 		fern.rotation.y = float(seed * 43 % 360) * PI / 180.0
+		_register_foliage_sway(fern, seed, 0.065)
 		return
 	_add_plant(pos, seed)
 
@@ -918,6 +934,12 @@ func _set_scene_visibility_range(root: Node, range_end: float) -> void:
 	for child in root.get_children():
 		_set_scene_visibility_range(child, range_end)
 
+func _register_foliage_sway(foliage: Node3D, seed: int, strength: float) -> void:
+	foliage_sway_nodes.append(foliage)
+	foliage_sway_base_rotations.append(foliage.rotation)
+	foliage_sway_phases.append(float(seed % 97) * 0.173)
+	foliage_sway_strengths.append(strength)
+
 func _add_plant(pos: Vector3, seed: int) -> void:
 	var plant_scene := _get_nature_scene(["Fern_1", "Bush_Common", "Clover_1", "Flower_3_Group", "Bush001", "Bush002", "Reed001", "Reed002"], seed)
 	if plant_scene:
@@ -928,6 +950,7 @@ func _add_plant(pos: Vector3, seed: int) -> void:
 		var scale_factor := 0.30 + float(seed % 5) * 0.10
 		plant.scale = Vector3.ONE * scale_factor
 		plant.rotation.y = float(seed * 41 % 360) * PI / 180.0
+		_register_foliage_sway(plant, seed, 0.045)
 		return
 	var stem := MeshInstance3D.new()
 	var stem_mesh := CylinderMesh.new()

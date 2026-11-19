@@ -854,9 +854,21 @@ func _build_terrain() -> void:
 	terrain_body.collision_mask = 1
 	var terrain_collision := CollisionShape3D.new()
 	terrain_collision.name = "TerrainMeshCollision"
-	# A forma triangular é estática e acompanha exatamente a malha renderizada.
-	# O raycast de diagnóstico habilita hit_back_faces na própria consulta.
-	terrain_collision.shape = terrain_mesh.mesh.create_trimesh_shape()
+	# Gera a colisão a partir dos mesmos triângulos da malha visual, mas
+	# inverte a ordem dos vértices: o backend de física do Godot interpreta
+	# a face frontal da malha côncava no sentido oposto ao usado pelo SurfaceTool.
+	# Isso evita que os raios e o CharacterBody atravessem o chão e atinjam
+	# somente o piso de segurança que fica muito abaixo do mapa.
+	var collision_arrays := terrain_mesh.mesh.surface_get_arrays(0)
+	var render_vertices: PackedVector3Array = collision_arrays[Mesh.ARRAY_VERTEX]
+	var collision_faces := PackedVector3Array()
+	for triangle_index in range(0, render_vertices.size(), 3):
+		collision_faces.append(render_vertices[triangle_index])
+		collision_faces.append(render_vertices[triangle_index + 2])
+		collision_faces.append(render_vertices[triangle_index + 1])
+	var terrain_shape := ConcavePolygonShape3D.new()
+	terrain_shape.set_faces(collision_faces)
+	terrain_collision.shape = terrain_shape
 	terrain_body.add_child(terrain_collision)
 	add_child(terrain_body)
 

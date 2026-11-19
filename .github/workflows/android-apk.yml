@@ -85,6 +85,15 @@ jobs:
           test -s "$TEMPLATE_DEST/android_debug.apk"
           test -s "$TEMPLATE_DEST/android_release.apk"
 
+      - name: Download optimized CC0 nature models
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x scripts/fetch_world_assets.sh
+          scripts/fetch_world_assets.sh
+          du -sh assets/nature
+          find assets/nature -maxdepth 1 -type f | sort
+
       - name: Validate project scripts and resources
         shell: bash
         run: |

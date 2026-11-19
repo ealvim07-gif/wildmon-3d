@@ -1,8 +1,8 @@
 # Wildmon 3D — Beta 0.1
 
-Wildmon 3D é um protótipo original de aventura e captura de criaturas em terceira pessoa, desenvolvido no Godot 4.4.1. Esta versão inicial serve para validar a cena 3D, os controles por toque, a câmera e o primeiro fluxo de captura em dispositivos Android.
+Wildmon 3D é um protótipo original de aventura e captura de criaturas em terceira pessoa, desenvolvido no Godot 4.4.1. A versão atual serve para validar a cena 3D, os controles por toque, a câmera e o primeiro fluxo de captura.
 
-> **Estado do projeto:** protótipo experimental. A existência do workflow não significa que já exista um APK pronto; a compilação precisa terminar com sucesso no GitHub Actions e publicar o artefato.
+> **Estado atual:** em correção e validação. A automação está temporariamente limitada a verificações do projeto. **Nenhum APK é exportado nesta fase.** A exportação Android só deverá ser reativada depois que as verificações do projeto passarem e a configuração Android for revisada separadamente.
 
 ## O que existe nesta beta
 
@@ -12,58 +12,35 @@ Wildmon 3D é um protótipo original de aventura e captura de criaturas em terce
 - Criatura original chamada **Brasafofo**.
 - Captura por aproximação e botão de ação.
 - Interface e mensagens em português.
-- Renderizador Compatibility (OpenGL), selecionado para a compatibilidade móvel.
+- Renderizador Compatibility (OpenGL), selecionado para compatibilidade móvel.
 
 ## Como jogar
 
-1. Abra o jogo no Android.
-2. Use os botões direcionais na parte inferior da tela para caminhar.
-3. Aproxime-se do Brasafofo.
-4. Quando estiver perto, toque em **CAPTURAR**.
+1. Use os botões direcionais na parte inferior da tela para caminhar.
+2. Aproxime-se do Brasafofo.
+3. Quando estiver perto, toque em **CAPTURAR**.
 
 Os controles e o conteúdo são provisórios e podem mudar nas próximas versões.
 
-## Gerar o APK pelo GitHub Actions
+## Validação automática (sem exportação)
 
-O workflow está em `.github/workflows/android-apk.yml` e exporta o preset **Android** definido em `export_presets.cfg`.
+O workflow está em `.github/workflows/android-apk.yml`. Ele executa apenas verificações com Godot 4.4.1:
 
-### Quando a compilação é iniciada
+1. Baixa e verifica a versão do executável Godot.
+2. Analisa a sintaxe do GDScript.
+3. Importa o projeto e valida recursos/cenas.
+4. Inicia a cena principal em modo headless por um teste curto.
+5. Confirma que o workflow não contém etapas de exportação nem de publicação de APK.
 
-- Automaticamente a cada push na branch `main`.
-- Manualmente pela aba **Actions**, selecionando **Build Wildmon 3D Android APK** e tocando em **Run workflow**.
+O workflow **não instala Android SDK, não configura assinatura, não executa `--export-debug` ou `--export-release` e não publica artefatos APK**.
 
-### Etapas executadas
+Acompanhe as verificações na aba [Actions](https://github.com/ealvim07-gif/wildmon-3d/actions). Se alguma etapa falhar, o log deverá apontar o erro a corrigir antes de avançar.
 
-1. Baixa o código do repositório.
-2. Prepara Java 17 e o Android SDK.
-3. Instala os componentes Android definidos no workflow.
-4. Cria uma chave Android de depuração temporária no runner.
-5. Executa a exportação com Godot 4.4.1 usando `firebelley/godot-export@v8.0.0`.
-6. Confere se o arquivo APK esperado existe e não está vazio.
-7. Publica o arquivo como artefato `Wildmon3D-Beta01-APK`.
+## Sobre a futura versão Android
 
-A ação de exportação utiliza o executável Linux Headless e os templates da mesma versão do Godot. Consulte a documentação oficial da ação para detalhes dos parâmetros: https://github.com/firebelley/godot-export
+A exportação Android permanece suspensa. Antes de reativá-la, ainda será necessário revisar separadamente o preset Android, os caminhos do Java 17 e Android SDK, as versões de SDK/build-tools, a assinatura e a compatibilidade em aparelho real.
 
-### Baixar e instalar
-
-1. Abra a aba **Actions** deste repositório.
-2. Entre na execução mais recente do workflow.
-3. Confirme que o status terminou em verde (**Success**).
-4. Na seção **Artifacts**, baixe `Wildmon3D-Beta01-APK`.
-5. Extraia o ZIP e instale o APK no Android.
-
-Se a execução estiver vermelha (**Failed**), não há APK validado nessa execução. Abra o job **Export Wildmon 3D Beta 0.1**, expanda a etapa que falhou e consulte a mensagem do log. O artefato tem retenção configurada para 14 dias; depois desse prazo, uma nova compilação será necessária.
-
-## Sobre o APK
-
-- Formato: APK Android.
-- Arquitetura configurada: `arm64-v8a`.
-- Identificador do pacote: `com.wildmon.game`.
-- Versão inicial: `0.1`.
-- Assinatura: chave de depuração temporária criada durante a compilação.
-- Uso: testes da beta, não publicação final.
-
-O Android pode pedir autorização para instalar aplicativos obtidos fora da loja. Como esta é uma compilação de depuração, não a utilize como versão final de distribuição. Uma futura versão de lançamento deverá usar uma chave de assinatura própria, armazenada com segurança nos secrets do GitHub.
+Quando todas as verificações estiverem aprovadas, a exportação será reintroduzida em uma etapa separada e explicitamente autorizada.
 
 ## Estrutura do repositório
 
@@ -72,22 +49,14 @@ O Android pode pedir autorização para instalar aplicativos obtidos fora da loj
 | `project.godot` | Configurações gerais e cena inicial do projeto. |
 | `scenes/main.tscn` | Cena principal do jogo. |
 | `scripts/game.gd` | Criação do cenário, personagem, criatura, controles e captura. |
-| `export_presets.cfg` | Preset de exportação Android e caminho de saída do APK. |
-| `.github/workflows/android-apk.yml` | Automação de compilação e publicação do artefato APK. |
+| `export_presets.cfg` | Preset Android reservado para a futura fase de exportação. |
+| `.github/workflows/android-apk.yml` | Validação automática sem exportação. |
 
 ## Tecnologias
 
 - Godot Engine 4.4.1
 - GDScript
-- Android SDK
 - GitHub Actions
 - Renderizador Compatibility (OpenGL)
-
-## Próximas etapas sugeridas
-
-- Validar a compilação Android em CI e instalar o APK em um aparelho real.
-- Melhorar a movimentação, a câmera e o layout dos controles.
-- Criar mais criaturas e uma interface de equipe/inventário.
-- Adicionar salvamento de progresso e uma área maior de exploração.
 
 Todos os nomes, criaturas e elementos deste protótipo são originais.

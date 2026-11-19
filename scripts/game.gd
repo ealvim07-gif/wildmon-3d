@@ -1106,7 +1106,8 @@ func _try_capture() -> void:
 		captured_creature.queue_free()
 		_schedule_creature_respawn()
 	)
-	_update_status("Captura realizada! Brasafofo adicionado à coleção.")
+	var captured_name := "Brasafofo" if creature_species == 0 else "Pedralume"
+	_update_status(captured_name + " capturado e adicionado à coleção!")
 
 func _schedule_creature_respawn() -> void:
 	await get_tree().create_timer(3.5).timeout

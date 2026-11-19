@@ -762,6 +762,7 @@ func _add_grass_tuft(pos: Vector3, seed: int) -> void:
 	if grass_scene:
 		var grass := grass_scene.instantiate() as Node3D
 		add_child(grass)
+		_set_scene_visibility_range(grass, 42.0)
 		grass.position = pos
 		var scale_factor := 0.48 + float(seed % 5) * 0.10
 		grass.scale = Vector3.ONE * scale_factor
@@ -782,6 +783,7 @@ func _add_tree(pos: Vector3, seed: int) -> void:
 	if tree_scene:
 		var tree := tree_scene.instantiate() as Node3D
 		add_child(tree)
+		_set_scene_visibility_range(tree, 108.0)
 		tree.position = pos
 		var scale_factor := 0.78 + float(seed % 5) * 0.11
 		tree.scale = Vector3.ONE * scale_factor
@@ -825,11 +827,21 @@ func _get_nature_scene(names: Array, seed: int) -> PackedScene:
 		nature_model_cache[model_name] = loaded
 	return nature_model_cache[model_name] as PackedScene
 
+func _set_scene_visibility_range(root: Node, range_end: float) -> void:
+	# Distância de desenho reduz trabalho de GPU em vegetação distante.
+	# Aplicado recursivamente para alcançar as malhas dentro dos modelos importados.
+	if root is GeometryInstance3D:
+		var visual := root as GeometryInstance3D
+		visual.visibility_range_end = range_end
+	for child in root.get_children():
+		_set_scene_visibility_range(child, range_end)
+
 func _add_plant(pos: Vector3, seed: int) -> void:
 	var plant_scene := _get_nature_scene(["Fern_1", "Bush_Common", "Clover_1", "Flower_3_Group", "Bush001", "Bush002", "Reed001", "Reed002"], seed)
 	if plant_scene:
 		var plant := plant_scene.instantiate() as Node3D
 		add_child(plant)
+		_set_scene_visibility_range(plant, 58.0)
 		plant.position = pos
 		var scale_factor := 0.30 + float(seed % 5) * 0.10
 		plant.scale = Vector3.ONE * scale_factor

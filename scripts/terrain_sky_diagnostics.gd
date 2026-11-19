@@ -20,9 +20,9 @@ func _run_tests() -> void:
 
 	var terrain := game.find_child("GroundSurface", true, false) as MeshInstance3D
 	var terrain_body := game.find_child("TerrainCollision", true, false) as StaticBody3D
-	var world_environment := game.find_child("*", true, false) as WorldEnvironment
-	var player := game.find_child("*", true, false) as CharacterBody3D
-	var camera := game.find_child("*", true, false) as Camera3D
+	var world_environment := _find_typed_node(game, "WorldEnvironment") as WorldEnvironment
+	var player := _find_typed_node(game, "CharacterBody3D") as CharacterBody3D
+	var camera := _find_typed_node(game, "Camera3D") as Camera3D
 
 	if terrain == null or terrain.mesh == null:
 		_fail("A malha visível do terreno não foi criada.")
@@ -96,3 +96,20 @@ func _run_tests() -> void:
 func _fail(message: String) -> void:
 	push_error("WORLD_DIAGNOSTICS_FAILED: " + message)
 	quit(1)
+
+func _find_typed_node(node: Node, kind: String) -> Node:
+	match kind:
+		"WorldEnvironment":
+			if node is WorldEnvironment:
+				return node
+		"CharacterBody3D":
+			if node is CharacterBody3D:
+				return node
+		"Camera3D":
+			if node is Camera3D:
+				return node
+	for child in node.get_children():
+		var found := _find_typed_node(child, kind)
+		if found != null:
+			return found
+	return null

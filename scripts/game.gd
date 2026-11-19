@@ -16,6 +16,7 @@ var touch_left := false
 var touch_right := false
 var touch_forward := false
 var touch_back := false
+var camera_drag_active := false
 
 func _ready() -> void:
 	_build_world()
@@ -23,6 +24,20 @@ func _ready() -> void:
 	_build_creature()
 	_build_ui()
 	_update_status("Explore o vale e encontre uma criatura!")
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			var screen_size := get_viewport().get_visible_rect().size
+			camera_drag_active = event.position.x > screen_size.x * 0.42 and event.position.y < screen_size.y * 0.84
+		else:
+			camera_drag_active = false
+	elif event is InputEventScreenDrag and camera_drag_active:
+		look_yaw -= event.relative.x * 0.008
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		camera_drag_active = event.pressed
+	elif event is InputEventMouseMotion and camera_drag_active and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		look_yaw -= event.relative.x * 0.008
 
 func _process(delta: float) -> void:
 	if player == null:
@@ -73,15 +88,18 @@ func _physics_process(delta: float) -> void:
 func _build_world() -> void:
 	var world_env := WorldEnvironment.new()
 	var env := Environment.new()
-	env.background_mode = Environment.BG_SKY
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.24, 0.55, 0.88)
+	env.background_energy_multiplier = 1.0
 	var sky := Sky.new()
 	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.20, 0.48, 0.72)
-	sky_mat.sky_horizon_color = Color(0.72, 0.84, 0.91)
+	sky_mat.sky_top_color = Color(0.12, 0.38, 0.78)
+	sky_mat.sky_horizon_color = Color(0.48, 0.72, 0.91)
 	sky_mat.ground_bottom_color = Color(0.16, 0.22, 0.16)
 	sky_mat.ground_horizon_color = Color(0.62, 0.70, 0.59)
 	sky.sky_material = sky_mat
 	env.sky = sky
+	env.ambient_light_sky_contribution = 0.0
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.72, 0.82, 0.91)
 	env.ambient_light_energy = 0.9
@@ -175,18 +193,18 @@ func _add_tree(pos: Vector3) -> void:
 	body.add_child(collision)
 
 	for crown_data in [
-		[Vector3(0, 2.8, 0), 1.25],
-		[Vector3(-0.62, 2.55, 0.08), 0.86],
-		[Vector3(0.62, 2.58, -0.10), 0.92],
-		[Vector3(0.05, 3.42, 0.12), 0.84]
+		[Vector3(0, 2.65, 0), 1.15],
+		[Vector3(-0.58, 2.45, 0.08), 0.82],
+		[Vector3(0.58, 2.48, -0.10), 0.86],
+		[Vector3(0.05, 3.25, 0.12), 0.78]
 	]:
 		var crown := MeshInstance3D.new()
-		var crown_mesh := SphereMesh.new()
-		crown_mesh.radius = 1.0
-		crown_mesh.height = 1.8
+		var crown_mesh := ConeMesh.new()
+		crown_mesh.top_radius = 0.08
+		crown_mesh.bottom_radius = crown_data[1]
+		crown_mesh.height = crown_data[1] * 2.0
 		crown.mesh = crown_mesh
 		crown.position = pos + crown_data[0]
-		crown.scale = Vector3(crown_data[1], crown_data[1] * 0.92, crown_data[1])
 		crown.material_override = _mat(Color(0.13, 0.34 + float(int(pos.x * 10.0) % 3) * 0.025, 0.18))
 		add_child(crown)
 
@@ -282,7 +300,7 @@ func _build_ui() -> void:
 	var vbox := VBoxContainer.new()
 	panel.add_child(vbox)
 	var title := Label.new()
-	title.text = "WILDMON 3D  •  BETA 0.1"
+	title.text = "WILDMON 3D  •  BETA 0.3"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 20)
 	vbox.add_child(title)
@@ -360,6 +378,8 @@ func _add_sphere_part(parent: Node3D, pos: Vector3, size: Vector3, color: Color)
 	var mesh := SphereMesh.new()
 	mesh.radius = 1.0
 	mesh.height = 2.0
+	mesh.radial_segments = 7
+	mesh.rings = 4
 	part.mesh = mesh
 	part.position = pos
 	part.scale = size

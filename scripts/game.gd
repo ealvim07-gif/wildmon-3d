@@ -667,17 +667,41 @@ func _build_terrain() -> void:
 	terrain.data.import_images([height_map, null, null], Vector3(-128.0, 0.0, -128.0), 0.0, 3.5)
 
 func _make_terrain_texture(asset_name: String, base_color: Color, accent_color: Color, noise_seed: int) -> Terrain3DTextureAsset:
-	var noise := FastNoiseLite.new()
-	noise.seed = noise_seed
-	noise.frequency = 0.035
+	var broad_noise := FastNoiseLite.new()
+	broad_noise.seed = noise_seed
+	broad_noise.frequency = 0.035
+	var detail_noise := FastNoiseLite.new()
+	detail_noise.seed = noise_seed + 137
+	detail_noise.frequency = 0.19
+	var grain_noise := FastNoiseLite.new()
+	grain_noise.seed = noise_seed + 293
+	grain_noise.frequency = 0.63
 	var albedo_image := Image.create(256, 256, false, Image.FORMAT_RGBA8)
 	var normal_image := Image.create(256, 256, false, Image.FORMAT_RGBA8)
-	normal_image.fill(Color(0.5, 0.5, 1.0, 0.82))
 	for y in range(256):
 		for x in range(256):
-			var variation := clampf(0.5 + noise.get_noise_2d(float(x), float(y)) * 0.48, 0.0, 1.0)
+			var fx := float(x)
+			var fy := float(y)
+			var broad := broad_noise.get_noise_2d(fx, fy)
+			var detail := detail_noise.get_noise_2d(fx, fy)
+			var grain := grain_noise.get_noise_2d(fx, fy)
+			var variation := clampf(0.50 + broad * 0.29 + detail * 0.15 + grain * 0.06, 0.0, 1.0)
 			var color := base_color.lerp(accent_color, variation)
-			albedo_image.set_pixel(x, y, Color(color.r, color.g, color.b, 0.5 + variation * 0.2))
+			var earthy_grain := 0.94 + grain * 0.075
+			color *= earthy_grain
+			albedo_image.set_pixel(x, y, Color(color.r, color.g, color.b, 1.0))
+			# Derivadas da mesma camada de ruído criam relevo fino sem geometria extra.
+			var dx := (broad_noise.get_noise_2d(fx + 1.0, fy) - broad_noise.get_noise_2d(fx - 1.0, fy)) * 0.5
+			var dy := (broad_noise.get_noise_2d(fx, fy + 1.0) - broad_noise.get_noise_2d(fx, fy - 1.0)) * 0.5
+			dx += (detail_noise.get_noise_2d(fx + 1.0, fy) - detail_noise.get_noise_2d(fx - 1.0, fy)) * 0.35
+			dy += (detail_noise.get_noise_2d(fx, fy + 1.0) - detail_noise.get_noise_2d(fx, fy - 1.0)) * 0.35
+			var normal := Vector3(-dx * 8.0, -dy * 8.0, 1.0).normalized()
+			normal_image.set_pixel(x, y, Color(
+				normal.x * 0.5 + 0.5,
+				normal.y * 0.5 + 0.5,
+				normal.z * 0.5 + 0.5,
+				1.0
+			))
 	albedo_image.generate_mipmaps()
 	normal_image.generate_mipmaps()
 	var asset := Terrain3DTextureAsset.new()

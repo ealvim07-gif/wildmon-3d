@@ -1025,11 +1025,25 @@ func _schedule_creature_respawn() -> void:
 		return
 	creature_captured = false
 	creature_in_range = false
+	creature_home = _choose_creature_spawn()
 	_build_creature()
 	if capture_button:
 		capture_button.disabled = false
 		capture_button.text = "CAPTURAR"
 	_update_status("Outra criatura apareceu no vale! Continue explorando.")
+
+func _choose_creature_spawn() -> Vector3:
+	# Mantém os reaparecimentos em áreas exploráveis e evita repetir sempre o mesmo ponto.
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var spawn_x := rng.randf_range(-22.0, 22.0)
+	var spawn_z := rng.randf_range(-24.0, -5.0)
+	var spawn := Vector3(spawn_x, _terrain_height(spawn_x, spawn_z) + 0.72, spawn_z)
+	if Vector2(spawn_x + 17.0, spawn_z + 12.0).length() < 9.0:
+		spawn_x += 12.0 if spawn_x < 0.0 else -12.0
+		spawn.x = spawn_x
+		spawn.y = _terrain_height(spawn_x, spawn_z) + 0.72
+	return spawn
 
 func _load_collection() -> void:
 	var save_data := ConfigFile.new()

@@ -193,6 +193,7 @@ func _build_world() -> void:
 		_add_grass_tuft(Vector3(px, _terrain_height(px, pz), pz), i)
 
 	_build_biome_details(rng)
+	_build_biome_floor_patches()
 	_build_biome_ground_cover(rng)
 
 func _build_biome_ground_cover(rng: RandomNumberGenerator) -> void:
@@ -236,6 +237,63 @@ func _build_biome_ground_cover(rng: RandomNumberGenerator) -> void:
 			var px := center.x + cos(angle) * radius
 			var pz := center.y + sin(angle) * radius * 0.8
 			_add_grass_tuft(Vector3(px, _terrain_height(px, pz), pz), 1200 + center_index * 11 + i)
+
+func _build_biome_floor_patches() -> void:
+	# Camadas discretas de chão ajudam a separar visualmente os biomas.
+	# As malhas seguem o relevo e têm bordas orgânicas, sem círculos perfeitos.
+	var forest_centers := [Vector2(-43.0, -39.0), Vector2(43.0, -37.0), Vector2(-46.0, 39.0), Vector2(45.0, 40.0)]
+	for i in range(forest_centers.size()):
+		_add_biome_floor_patch(forest_centers[i], 10.5, 8.2, Color(0.19, 0.24, 0.12), 210 + i)
+	var meadow_centers := [Vector2(-37.0, 8.0), Vector2(35.0, 28.0)]
+	for i in range(meadow_centers.size()):
+		_add_biome_floor_patch(meadow_centers[i], 8.6, 6.4, Color(0.31, 0.39, 0.17), 230 + i)
+	var rocky_centers := [Vector2(48.0, 4.0), Vector2(-48.0, -5.0), Vector2(8.0, 49.0)]
+	for i in range(rocky_centers.size()):
+		_add_biome_floor_patch(rocky_centers[i], 7.2, 5.8, Color(0.34, 0.33, 0.28), 250 + i)
+
+func _add_biome_floor_patch(center: Vector2, radius_x: float, radius_z: float, base_color: Color, seed: int) -> void:
+	var segments := 28
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var center_pos := Vector3(center.x, _terrain_height(center.x, center.y) + 0.075, center.y)
+	var center_color := base_color.lerp(Color(0.13, 0.15, 0.11), 0.12)
+	for i in range(segments):
+		var angle_a := TAU * float(i) / float(segments)
+		var angle_b := TAU * float(i + 1) / float(segments)
+		var wave_a := 1.0 + sin(angle_a * 3.0 + float(seed)) * 0.105 + cos(angle_a * 5.0 - float(seed)) * 0.055
+		var wave_b := 1.0 + sin(angle_b * 3.0 + float(seed)) * 0.105 + cos(angle_b * 5.0 - float(seed)) * 0.055
+		var point_a := Vector3(
+			center.x + cos(angle_a) * radius_x * wave_a,
+			0.0,
+			center.y + sin(angle_a) * radius_z * wave_a
+		)
+		var point_b := Vector3(
+			center.x + cos(angle_b) * radius_x * wave_b,
+			0.0,
+			center.y + sin(angle_b) * radius_z * wave_b
+		)
+		point_a.y = _terrain_height(point_a.x, point_a.z) + 0.075
+		point_b.y = _terrain_height(point_b.x, point_b.z) + 0.075
+		var variation_a := 0.08 + absf(sin(angle_a * 4.0 + float(seed))) * 0.16
+		var variation_b := 0.08 + absf(sin(angle_b * 4.0 + float(seed))) * 0.16
+		var color_a := base_color.lerp(Color(0.52, 0.48, 0.34), variation_a)
+		var color_b := base_color.lerp(Color(0.52, 0.48, 0.34), variation_b)
+		# Ordem dos vértices voltada para cima.
+		surface.set_color(center_color)
+		surface.add_vertex(center_pos)
+		surface.set_color(color_b)
+		surface.add_vertex(point_b)
+		surface.set_color(color_a)
+		surface.add_vertex(point_a)
+	surface.generate_normals()
+	var patch := MeshInstance3D.new()
+	patch.mesh = surface.commit()
+	var patch_material := StandardMaterial3D.new()
+	patch_material.vertex_color_use_as_albedo = true
+	patch_material.roughness = 1.0
+	patch_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	patch.material_override = patch_material
+	add_child(patch)
 
 func _add_meadow_flower(pos: Vector3, seed: int) -> void:
 	var flower_scene := _get_nature_scene(["Flower_3_Group", "Clover_1"], seed)

@@ -162,19 +162,19 @@ func _build_world() -> void:
 		_add_tree(Vector3(px, _terrain_height(px, pz), pz), i)
 	for i in range(150):
 		var px := rng.randf_range(-66.0, 66.0)
-		var pz := rng.randf_range(-36.0, 36.0)
+		var pz := rng.randf_range(-66.0, 66.0)
 		if absf(px) < 7.0 and pz < 12.0 and pz > -31.0:
 			continue
 		_add_plant(Vector3(px, _terrain_height(px, pz), pz), i)
 	for i in range(58):
-		var px := rng.randf_range(-35.0, 35.0)
-		var pz := rng.randf_range(-35.0, 35.0)
+		var px := rng.randf_range(-66.0, 66.0)
+		var pz := rng.randf_range(-66.0, 66.0)
 		if absf(px) < 9.0 and pz < 12.0 and pz > -30.0:
 			continue
 		_add_rock(Vector3(px, _terrain_height(px, pz), pz), i)
 	for i in range(190):
 		var px := rng.randf_range(-67.0, 67.0)
-		var pz := rng.randf_range(-37.0, 37.0)
+		var pz := rng.randf_range(-67.0, 67.0)
 		if absf(px) < 8.0 and pz < 12.0 and pz > -31.0:
 			continue
 		_add_grass_tuft(Vector3(px, _terrain_height(px, pz), pz), i)

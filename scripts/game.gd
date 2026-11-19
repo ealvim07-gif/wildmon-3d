@@ -13,6 +13,7 @@ var creature: Node3D
 var creature_tail: Node3D
 var creature_leg_parts: Array[MeshInstance3D] = []
 var creature_ear_parts: Array[MeshInstance3D] = []
+var creature_crystal_parts: Array[Node3D] = []
 var creature_home := Vector3(2.5, 0.72, -9.0)
 var creature_captured := false
 var captured_count := 0
@@ -93,6 +94,9 @@ func _process(delta: float) -> void:
 			var ear_side := -1.0 if ear_index == 0 else 1.0
 			var ear_idle := sin(creature_clock * 2.1 + float(ear_index) * 0.8) * 0.055
 			creature_ear_parts[ear_index].rotation.z = ear_side * -0.20 + ear_idle
+		for crystal_index in range(creature_crystal_parts.size()):
+			var crystal_pulse := 1.0 + sin(creature_clock * 3.0 + float(crystal_index) * 0.9) * 0.055
+			creature_crystal_parts[crystal_index].scale = Vector3(1.0, crystal_pulse, 1.0)
 		var now_in_range := player.global_position.distance_to(creature.global_position) < 3.0
 		if now_in_range != creature_in_range:
 			creature_in_range = now_in_range
@@ -845,6 +849,7 @@ func _build_creature() -> void:
 	creature_tail = null
 	creature_leg_parts.clear()
 	creature_ear_parts.clear()
+	creature_crystal_parts.clear()
 	if creature_species == 0:
 		_build_brasafofo()
 	else:
@@ -930,10 +935,21 @@ func _build_pedralume() -> void:
 		creature_leg_parts.append(rear_leg)
 		_add_prism_part(creature, Vector3(side * 0.34, -0.43, 0.31), Vector3(0.22, 0.11, 0.23), stone_light)
 		_add_prism_part(creature, Vector3(side * 0.34, -0.43, -0.25), Vector3(0.22, 0.11, 0.23), stone_light)
-	# Cristais dorsais assimétricos são a assinatura visual do Pedralume.
-	_add_prism_part(creature, Vector3(-0.23, 0.48, -0.12), Vector3(0.20, 0.42, 0.18), Color(0.20, 0.78, 0.72))
-	_add_prism_part(creature, Vector3(0.02, 0.54, -0.08), Vector3(0.22, 0.56, 0.19), Color(0.32, 0.91, 0.78))
-	_add_prism_part(creature, Vector3(0.25, 0.45, -0.15), Vector3(0.18, 0.36, 0.16), Color(0.13, 0.61, 0.61))
+	# Cristais dorsais assimétricos: cada fragmento pulsa em um ritmo próprio.
+	var crystal_specs := [
+		[Vector3(-0.23, 0.48, -0.12), Vector3(0.20, 0.42, 0.18), Color(0.20, 0.78, 0.72)],
+		[Vector3(0.02, 0.54, -0.08), Vector3(0.22, 0.56, 0.19), Color(0.32, 0.91, 0.78)],
+		[Vector3(0.25, 0.45, -0.15), Vector3(0.18, 0.36, 0.16), Color(0.13, 0.61, 0.61)]
+	]
+	for crystal_spec in crystal_specs:
+		var crystal_pivot := Node3D.new()
+		crystal_pivot.position = crystal_spec[0]
+		creature.add_child(crystal_pivot)
+		_add_prism_part(crystal_pivot, Vector3.ZERO, crystal_spec[1], crystal_spec[2])
+		creature_crystal_parts.append(crystal_pivot)
+	# Placas laterais quebram a forma do tronco e reforçam a aparência mineral.
+	_add_prism_part(creature, Vector3(-0.43, 0.10, -0.02), Vector3(0.18, 0.38, 0.50), Color(0.22, 0.30, 0.29))
+	_add_prism_part(creature, Vector3(0.43, 0.10, -0.02), Vector3(0.18, 0.38, 0.50), Color(0.22, 0.30, 0.29))
 	_add_prism_part(creature, Vector3(-0.02, 0.31, -0.43), Vector3(0.28, 0.24, 0.24), stone_light)
 
 func _build_ui() -> void:

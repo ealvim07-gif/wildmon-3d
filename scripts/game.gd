@@ -235,7 +235,8 @@ func _build_biome_details(rng: RandomNumberGenerator) -> void:
 		for i in range(12):
 			var t := float(i) / 11.0
 			var px := -54.0 + t * 108.0
-			var pz := (ridge_index == 0 ? 20.0 : -43.0) + sin(t * TAU * 1.4 + ridge_index) * 5.5
+			var ridge_base_z := 20.0 if ridge_index == 0 else -43.0
+			var pz := ridge_base_z + sin(t * TAU * 1.4 + ridge_index) * 5.5
 			px += rng.randf_range(-2.0, 2.0)
 			pz += rng.randf_range(-2.5, 2.5)
 			_add_rock(Vector3(px, _terrain_height(px, pz), pz), 580 + ridge_index * 19 + i)

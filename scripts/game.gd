@@ -1022,44 +1022,83 @@ func _add_plant(pos: Vector3, seed: int) -> void:
 
 func _build_player() -> void:
 	player = CharacterBody3D.new()
-	player.position = Vector3(0, 1, 4)
+	player.position = Vector3(0.0, _terrain_height(0.0, 4.0) + 0.06, 4.0)
 	add_child(player)
+
 	var body := CollisionShape3D.new()
 	var capsule := CapsuleShape3D.new()
-	capsule.radius = 0.38
-	capsule.height = 1.75
+	capsule.radius = 0.34
+	capsule.height = 1.78
 	body.shape = capsule
-	body.position.y = 0.88
+	body.position.y = 0.90
 	player.add_child(body)
+
 	player_model = Node3D.new()
 	player.add_child(player_model)
 
-	# Silhueta de explorador com volumes mais retos e peças sobrepostas.
-	_add_box(player_model, Vector3(0, 1.20, 0), Vector3(0.72, 0.82, 0.48), Color(0.10, 0.27, 0.42), false)
-	_add_box(player_model, Vector3(0, 0.78, 0.015), Vector3(0.76, 0.16, 0.50), Color(0.16, 0.18, 0.19), false)
-	_add_faceted_part(player_model, Vector3(0, 1.91, 0.02), Vector3(0.29, 0.34, 0.27), Color(0.88, 0.67, 0.52))
-	_add_box(player_model, Vector3(0, 2.18, -0.015), Vector3(0.66, 0.13, 0.58), Color(0.10, 0.13, 0.17), false)
-	_add_box(player_model, Vector3(0, 2.09, 0.015), Vector3(0.66, 0.09, 0.58), Color(0.86, 0.30, 0.10), false)
-	_add_box(player_model, Vector3(0, 1.22, -0.31), Vector3(0.48, 0.52, 0.22), Color(0.63, 0.25, 0.10), false)
-	_add_box(player_model, Vector3(-0.18, 1.26, 0.25), Vector3(0.055, 0.42, 0.055), Color(0.91, 0.75, 0.42), false)
-	_add_box(player_model, Vector3(0.18, 1.26, 0.25), Vector3(0.055, 0.42, 0.055), Color(0.91, 0.75, 0.42), false)
+	# Explorador estilizado: silhueta legível, roupas em camadas e acessórios.
+	_add_prism_part(player_model, Vector3(0.0, 1.22, 0.0), Vector3(0.72, 0.78, 0.43), Color(0.10, 0.25, 0.39))
+	_add_box(player_model, Vector3(0.0, 0.88, 0.015), Vector3(0.72, 0.13, 0.46), Color(0.18, 0.17, 0.14), false)
+	_add_box(player_model, Vector3(0.0, 0.91, 0.255), Vector3(0.23, 0.12, 0.035), Color(0.88, 0.65, 0.27), false)
+
+	# Mochila arredondada, com tampa, bolsos e alças visíveis por trás.
+	_add_prism_part(player_model, Vector3(0.0, 1.28, -0.285), Vector3(0.48, 0.58, 0.22), Color(0.48, 0.20, 0.10))
+	_add_box(player_model, Vector3(0.0, 1.56, -0.30), Vector3(0.43, 0.13, 0.24), Color(0.67, 0.31, 0.13), false)
+	_add_box(player_model, Vector3(-0.13, 1.19, -0.405), Vector3(0.17, 0.20, 0.055), Color(0.34, 0.16, 0.09), false)
+	_add_box(player_model, Vector3(0.13, 1.19, -0.405), Vector3(0.17, 0.20, 0.055), Color(0.34, 0.16, 0.09), false)
+	for side in [-1.0, 1.0]:
+		_add_box(player_model, Vector3(side * 0.235, 1.30, 0.02), Vector3(0.075, 0.56, 0.075), Color(0.82, 0.61, 0.31), false)
+
+	# Gola e lenço de aventura.
+	_add_prism_part(player_model, Vector3(0.0, 1.62, 0.025), Vector3(0.38, 0.17, 0.36), Color(0.82, 0.38, 0.13))
+	_add_box(player_model, Vector3(0.10, 1.54, 0.225), Vector3(0.12, 0.24, 0.045), Color(0.94, 0.68, 0.30), false)
+
+	# Cabeça, orelhas, olhos e nariz.
+	_add_faceted_part(player_model, Vector3(0.0, 1.91, 0.035), Vector3(0.265, 0.31, 0.245), Color(0.83, 0.62, 0.48))
+	_add_faceted_part(player_model, Vector3(-0.265, 1.91, 0.04), Vector3(0.055, 0.10, 0.055), Color(0.72, 0.47, 0.36))
+	_add_faceted_part(player_model, Vector3(0.265, 1.91, 0.04), Vector3(0.055, 0.10, 0.055), Color(0.72, 0.47, 0.36))
+	_add_faceted_part(player_model, Vector3(-0.105, 1.96, 0.255), Vector3(0.035, 0.045, 0.025), Color(0.07, 0.06, 0.05))
+	_add_faceted_part(player_model, Vector3(0.105, 1.96, 0.255), Vector3(0.035, 0.045, 0.025), Color(0.07, 0.06, 0.05))
+	_add_faceted_part(player_model, Vector3(0.0, 1.88, 0.275), Vector3(0.045, 0.04, 0.035), Color(0.68, 0.39, 0.31))
+
+	# Chapéu de explorador em duas peças, em vez de uma barra retangular.
+	var hat_brim := MeshInstance3D.new()
+	var brim_mesh := CylinderMesh.new()
+	brim_mesh.top_radius = 0.36
+	brim_mesh.bottom_radius = 0.38
+	brim_mesh.height = 0.075
+	brim_mesh.radial_segments = 12
+	hat_brim.mesh = brim_mesh
+	hat_brim.position = Vector3(0.0, 2.15, 0.02)
+	hat_brim.material_override = _mat(Color(0.17, 0.20, 0.18))
+	player_model.add_child(hat_brim)
+	var hat_crown := MeshInstance3D.new()
+	var crown_mesh := CylinderMesh.new()
+	crown_mesh.top_radius = 0.255
+	crown_mesh.bottom_radius = 0.29
+	crown_mesh.height = 0.22
+	crown_mesh.radial_segments = 10
+	hat_crown.mesh = crown_mesh
+	hat_crown.position = Vector3(0.0, 2.28, 0.02)
+	hat_crown.material_override = _mat(Color(0.73, 0.30, 0.13))
+	player_model.add_child(hat_crown)
+
 	for side_index in range(2):
 		var side := -1.0 if side_index == 0 else 1.0
-		var arm := _add_limb_part(player_model, Vector3(side * 0.43, 1.18, 0), Vector3(0.13, 0.40, 0.13), Color(0.82, 0.57, 0.42))
+		var arm := _add_limb_part(player_model, Vector3(side * 0.42, 1.23, 0.0), Vector3(0.15, 0.42, 0.15), Color(0.78, 0.56, 0.43))
 		player_arm_parts.append(arm)
-		_add_box(player_model, Vector3(side * 0.45, 0.91, 0.02), Vector3(0.20, 0.13, 0.19), Color(0.18, 0.20, 0.23), false)
-		var leg := _add_limb_part(player_model, Vector3(side * 0.19, 0.32, 0), Vector3(0.16, 0.42, 0.17), Color(0.12, 0.18, 0.27))
+		_add_box(player_model, Vector3(side * 0.43, 0.91, 0.035), Vector3(0.18, 0.16, 0.18), Color(0.20, 0.22, 0.22), false)
+		var leg := _add_limb_part(player_model, Vector3(side * 0.19, 0.40, 0.0), Vector3(0.17, 0.48, 0.17), Color(0.16, 0.22, 0.29))
 		player_leg_parts.append(leg)
-		_add_box(player_model, Vector3(side * 0.19, 0.10, 0.11), Vector3(0.32, 0.16, 0.42), Color(0.08, 0.09, 0.11), false)
-	_add_faceted_part(player_model, Vector3(0, 1.91, 0.275), Vector3(0.045, 0.045, 0.035), Color(0.10, 0.09, 0.08))
-	_add_faceted_part(player_model, Vector3(0.16, 1.97, 0.26), Vector3(0.035, 0.045, 0.025), Color(0.10, 0.09, 0.08))
+		_add_box(player_model, Vector3(side * 0.19, 0.13, 0.12), Vector3(0.30, 0.20, 0.42), Color(0.12, 0.13, 0.15), false)
+		_add_box(player_model, Vector3(side * 0.19, 0.045, 0.12), Vector3(0.30, 0.045, 0.42), Color(0.31, 0.25, 0.17), false)
 
 	camera = Camera3D.new()
 	camera.current = true
-	camera.fov = 62
+	camera.fov = 66
 	add_child(camera)
-	camera.global_position = Vector3(0, 3.2, 11.5)
-	camera.look_at(Vector3(0, 1, 0))
+	camera.global_position = Vector3(0.0, player.global_position.y + 2.7, 10.8)
+	camera.look_at(player.global_position + Vector3(0.0, 1.15, 0.0))
 
 func _build_creature() -> void:
 	# Alterna espécies para que a coleção tenha criaturas com silhuetas realmente diferentes.

@@ -15,7 +15,7 @@ var look_yaw := 0.0
 var target_look_yaw := 0.0
 var look_pitch := 0.28
 var target_look_pitch := 0.28
-const CAMERA_SENSITIVITY := 0.0026
+const CAMERA_SENSITIVITY := 0.0019
 var nature_model_cache: Dictionary = {}
 var status_label: Label
 var capture_button: Button
@@ -46,17 +46,17 @@ func _input(event: InputEvent) -> void:
 		camera_drag_active = event.pressed
 	elif event is InputEventMouseMotion and camera_drag_active and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		target_look_yaw -= event.relative.x * CAMERA_SENSITIVITY
-		target_look_pitch = clampf(target_look_pitch + event.relative.y * CAMERA_SENSITIVITY, -0.34, 0.82)
+		target_look_pitch = clampf(target_look_pitch + event.relative.y * CAMERA_SENSITIVITY, -0.58, 0.82)
 
 func _process(delta: float) -> void:
 	if player == null:
 		return
-	look_yaw = lerp_angle(look_yaw, target_look_yaw, minf(delta * 7.0, 1.0))
+	look_yaw = lerp_angle(look_yaw, target_look_yaw, minf(delta * 5.2, 1.0))
 	look_pitch = lerpf(look_pitch, target_look_pitch, minf(delta * 7.0, 1.0))
 	var target := player.global_position + Vector3(0, 1.25, 0)
 	var horizontal := cos(look_pitch) * CAMERA_DISTANCE
 	var cam_offset := Vector3(sin(look_yaw) * horizontal, sin(look_pitch) * CAMERA_DISTANCE, cos(look_yaw) * horizontal)
-	camera.global_position = camera.global_position.lerp(target + cam_offset, minf(delta * 5.5, 1.0))
+	camera.global_position = camera.global_position.lerp(target + cam_offset, minf(delta * 4.4, 1.0))
 	camera.look_at(target, Vector3.UP)
 	if creature and not creature_captured:
 		creature.rotate_y(delta * 0.55)
@@ -191,6 +191,32 @@ func _build_world() -> void:
 		if absf(px) < 8.0 and pz < 12.0 and pz > -31.0:
 			continue
 		_add_grass_tuft(Vector3(px, _terrain_height(px, pz), pz), i)
+
+	_build_biome_details(rng)
+
+func _build_biome_details(rng: RandomNumberGenerator) -> void:
+	# Afloramento rochoso: agrupamentos assimétricos em vez de pedras uniformemente espalhadas.
+	var outcrop_centers := [Vector2(48.0, 4.0), Vector2(-48.0, -5.0), Vector2(8.0, 49.0)]
+	for center_index in range(outcrop_centers.size()):
+		var center: Vector2 = outcrop_centers[center_index]
+		for i in range(13):
+			var angle := rng.randf_range(0.0, TAU)
+			var radius := rng.randf_range(1.5, 8.5)
+			var px := center.x + cos(angle) * radius * rng.randf_range(0.65, 1.25)
+			var pz := center.y + sin(angle) * radius
+			_add_rock(Vector3(px, _terrain_height(px, pz), pz), 180 + center_index * 17 + i)
+	# Clareiras floridas com bordas irregulares e vegetação baixa.
+	var meadow_centers := [Vector2(-37.0, 8.0), Vector2(35.0, 28.0)]
+	for center_index in range(meadow_centers.size()):
+		var center: Vector2 = meadow_centers[center_index]
+		for i in range(22):
+			var angle := rng.randf_range(0.0, TAU)
+			var radius := sqrt(rng.randf()) * 10.0
+			var px := center.x + cos(angle) * radius
+			var pz := center.y + sin(angle) * radius * 0.72
+			_add_plant(Vector3(px, _terrain_height(px, pz), pz), 240 + center_index * 23 + i)
+			if i % 2 == 0:
+				_add_grass_tuft(Vector3(px + 0.45, _terrain_height(px + 0.45, pz), pz), 300 + i)
 
 func _build_trail() -> void:
 	var points := [

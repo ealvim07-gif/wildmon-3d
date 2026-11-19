@@ -308,6 +308,8 @@ func _make_terrain_texture(asset_name: String, base_color: Color, accent_color: 
 			var variation := clampf(0.5 + noise.get_noise_2d(float(x), float(y)) * 0.48, 0.0, 1.0)
 			var color := base_color.lerp(accent_color, variation)
 			albedo_image.set_pixel(x, y, Color(color.r, color.g, color.b, 0.5 + variation * 0.2))
+	albedo_image.generate_mipmaps()
+	normal_image.generate_mipmaps()
 	var asset := Terrain3DTextureAsset.new()
 	asset.name = asset_name
 	asset.albedo_texture = ImageTexture.create_from_image(albedo_image)

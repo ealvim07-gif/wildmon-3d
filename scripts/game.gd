@@ -816,10 +816,10 @@ func _build_player() -> void:
 	_add_box(player_model, Vector3(0.18, 1.26, 0.25), Vector3(0.055, 0.42, 0.055), Color(0.91, 0.75, 0.42), false)
 	for side_index in range(2):
 		var side := -1.0 if side_index == 0 else 1.0
-		var arm := _add_capsule_part(player_model, Vector3(side * 0.43, 1.18, 0), Vector3(0.13, 0.40, 0.13), Color(0.82, 0.57, 0.42))
+		var arm := _add_limb_part(player_model, Vector3(side * 0.43, 1.18, 0), Vector3(0.13, 0.40, 0.13), Color(0.82, 0.57, 0.42))
 		player_arm_parts.append(arm)
 		_add_box(player_model, Vector3(side * 0.45, 0.91, 0.02), Vector3(0.20, 0.13, 0.19), Color(0.18, 0.20, 0.23), false)
-		var leg := _add_capsule_part(player_model, Vector3(side * 0.19, 0.32, 0), Vector3(0.16, 0.42, 0.17), Color(0.12, 0.18, 0.27))
+		var leg := _add_limb_part(player_model, Vector3(side * 0.19, 0.32, 0), Vector3(0.16, 0.42, 0.17), Color(0.12, 0.18, 0.27))
 		player_leg_parts.append(leg)
 		_add_box(player_model, Vector3(side * 0.19, 0.10, 0.11), Vector3(0.32, 0.16, 0.42), Color(0.08, 0.09, 0.11), false)
 	_add_faceted_part(player_model, Vector3(0, 1.91, 0.275), Vector3(0.045, 0.045, 0.035), Color(0.10, 0.09, 0.08))
@@ -876,7 +876,7 @@ func _build_creature() -> void:
 		_add_box(creature, Vector3(side * 0.23, 0.64, 0.43), Vector3(0.075, 0.22, 0.035), Color(1.0, 0.58, 0.25), false)
 		_add_faceted_part(creature, Vector3(side * 0.16, 0.39, 0.64), Vector3(0.065, 0.085, 0.045), Color(0.98, 0.91, 0.68))
 		_add_faceted_part(creature, Vector3(side * 0.16, 0.39, 0.675), Vector3(0.027, 0.047, 0.022), Color(0.08, 0.06, 0.05))
-		var leg := _add_capsule_part(creature, Vector3(side * 0.40, -0.28, 0.12), Vector3(0.12, 0.26, 0.12), body_color)
+		var leg := _add_limb_part(creature, Vector3(side * 0.40, -0.28, 0.12), Vector3(0.12, 0.26, 0.12), body_color)
 		creature_leg_parts.append(leg)
 		_add_box(creature, Vector3(side * 0.40, -0.44, 0.18), Vector3(0.19, 0.12, 0.23), Color(0.24, 0.10, 0.055), false)
 	# Cauda articulada em três camadas cônicas, com balanço suave.
@@ -1134,16 +1134,18 @@ func _add_sphere_part(parent: Node3D, pos: Vector3, size: Vector3, color: Color)
 	part.material_override = _mat(color)
 	parent.add_child(part)
 
-func _add_capsule_part(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> MeshInstance3D:
+func _add_limb_part(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> MeshInstance3D:
+	# Membros com seção hexagonal e leve afunilamento: silhueta mais firme e menos arredondada.
 	var part := MeshInstance3D.new()
-	var mesh := CapsuleMesh.new()
-	mesh.radius = 0.5
-	mesh.height = 2.0
-	mesh.radial_segments = 8
-	mesh.rings = 3
+	var mesh := CylinderMesh.new()
+	var radius := minf(size.x, size.z) * 0.5
+	mesh.top_radius = radius * 0.78
+	mesh.bottom_radius = radius
+	mesh.height = size.y * 2.0
+	mesh.radial_segments = 6
+	mesh.rings = 1
 	part.mesh = mesh
 	part.position = pos
-	part.scale = size
 	part.material_override = _mat(color)
 	parent.add_child(part)
 	return part

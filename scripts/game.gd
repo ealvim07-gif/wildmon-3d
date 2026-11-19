@@ -8,7 +8,7 @@ class AnalogStick extends Control:
 	var active := false
 
 	func _ready() -> void:
-		custom_minimum_size = Vector2(184, 184)
+		custom_minimum_size = Vector2(196, 196)
 		mouse_filter = Control.MOUSE_FILTER_STOP
 		knob_position = size * 0.5
 		queue_redraw()
@@ -47,6 +47,11 @@ class AnalogStick extends Control:
 			offset = offset.normalized() * radius
 		knob_position = center + offset
 		stick_value = Vector2(offset.x / radius, offset.y / radius)
+		var input_strength := stick_value.length()
+		if input_strength <= 0.12:
+			stick_value = Vector2.ZERO
+		else:
+			stick_value = stick_value.normalized() * ((input_strength - 0.12) / 0.88)
 		if stick_value.length() > 1.0:
 			stick_value = stick_value.normalized()
 		value_changed.emit(stick_value)
@@ -130,7 +135,11 @@ func _input(event: InputEvent) -> void:
 		target_look_yaw -= event.relative.x * CAMERA_SENSITIVITY
 		target_look_pitch = clampf(target_look_pitch + event.relative.y * CAMERA_SENSITIVITY, -0.62, 0.88)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		camera_drag_active = event.pressed
+		var screen_size := get_viewport().get_visible_rect().size
+		var in_camera_area: bool = event.position.x > screen_size.x * 0.44
+		in_camera_area = in_camera_area and event.position.y > screen_size.y * 0.17
+		in_camera_area = in_camera_area and event.position.y < screen_size.y * 0.66
+		camera_drag_active = event.pressed and in_camera_area
 	elif event is InputEventMouseMotion and camera_drag_active and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		target_look_yaw -= event.relative.x * CAMERA_SENSITIVITY
 		target_look_pitch = clampf(target_look_pitch + event.relative.y * CAMERA_SENSITIVITY, -0.62, 0.88)
@@ -1135,8 +1144,8 @@ func _build_ui() -> void:
 	movement_stick.anchor_right = 0.025
 	movement_stick.anchor_bottom = 1.0
 	movement_stick.offset_left = 0
-	movement_stick.offset_top = -204
-	movement_stick.offset_right = 184
+	movement_stick.offset_top = -216
+	movement_stick.offset_right = 196
 	movement_stick.offset_bottom = -20
 	movement_stick.value_changed.connect(func(value: Vector2): movement_input = value)
 	layer.add_child(movement_stick)
@@ -1147,12 +1156,13 @@ func _build_ui() -> void:
 	capture_button.anchor_top = 1.0
 	capture_button.anchor_right = 1.0
 	capture_button.anchor_bottom = 1.0
-	capture_button.offset_left = -184
-	capture_button.offset_top = -112
+	capture_button.offset_left = -196
+	capture_button.offset_top = -116
 	capture_button.offset_right = -20
 	capture_button.offset_bottom = -28
-	capture_button.custom_minimum_size = Vector2(164, 84)
-	capture_button.add_theme_font_size_override("font_size", 18)
+	capture_button.custom_minimum_size = Vector2(176, 88)
+	capture_button.add_theme_font_size_override("font_size", 19)
+	capture_button.focus_mode = Control.FOCUS_NONE
 	var capture_style := StyleBoxFlat.new()
 	capture_style.bg_color = Color(0.70, 0.25, 0.09, 0.96)
 	capture_style.border_color = Color(1.0, 0.72, 0.38)

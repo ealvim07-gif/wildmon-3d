@@ -16,13 +16,14 @@ Esta atualização reúne uma reformulação visual ampla do protótipo:
 - Segunda espécie original, Pedralume: criatura rochosa de quatro patas, corpo facetado e cristais dorsais; alterna com o Brasafofo durante os encontros.
 - Coleção separada por espécie, com contadores persistentes para Brasafofo e Pedralume.
 - Criatura com movimento de espera e deslocamento suave pelo ambiente.
-- Interface mobile redesenhada com painel translúcido e botões estilizados.
+- Interface mobile com analógico virtual grande, zona morta configurada, câmera por arraste independente e botão de captura ampliado.
+- Vegetação baixa com animação procedural leve de brisa, mantendo árvores e elementos maiores estáveis para economizar processamento.
 
 ## Controles
 
-- Use os botões direcionais para caminhar.
-- Arraste o lado direito da tela para girar a câmera horizontalmente e ajustar a inclinação vertical.
-- Aproxime-se do Brasafofo e toque em **CAPTURAR**.
+- Use o analógico virtual no canto inferior esquerdo para caminhar em qualquer direção; a intensidade do movimento acompanha o deslocamento do controle.
+- Arraste a área livre do lado direito, acima dos botões, para girar a câmera e ajustar a inclinação.
+- Aproxime-se da criatura e toque em **CAPTURAR**. A coleção de Brasafofo e Pedralume é salva localmente.
 
 ## Tecnologia e compatibilidade
 
@@ -32,7 +33,7 @@ Esta atualização reúne uma reformulação visual ampla do protótipo:
 - Exportação Android ARM64
 - GitHub Actions para validação e compilação do APK
 
-O projeto prioriza desempenho em aparelhos Android intermediários. Os modelos de natureza são obtidos automaticamente pelo script `scripts/fetch_world_assets.sh` a partir do espelho público do pacote Quaternius. Os arquivos são licenciados em CC0 1.0 e são baixados durante a compilação; não é necessário armazenar os 16 MB de modelos e texturas no repositório. O pacote Terrain3D 1.0.2 inclui binários Android ARM64 e Linux; o cenário já passou pela validação headless no Linux. Ainda falta testar a renderização, colisão e desempenho em um aparelho Android real antes de fechar a Beta 2.0.
+O projeto prioriza desempenho em aparelhos Android intermediários. Os modelos de natureza são obtidos automaticamente pelo script `scripts/fetch_world_assets.sh` a partir do espelho público do pacote Quaternius. Os arquivos são licenciados em CC0 1.0 e são baixados durante a validação; não é necessário armazenar os modelos e texturas no repositório. O pacote Terrain3D 1.0.2 inclui binários Android ARM64 e Linux. A validação automatizada importa o projeto e inicia o mundo em modo headless no Linux; isso confirma a integridade básica do projeto, mas não substitui o teste visual e de desempenho em um aparelho Android real.
 
 ## Estrutura
 

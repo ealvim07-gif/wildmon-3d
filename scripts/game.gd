@@ -179,6 +179,8 @@ func _process(delta: float) -> void:
 	var camera_floor := _terrain_height(desired_camera_position.x, desired_camera_position.z) + 1.25
 	desired_camera_position.y = maxf(desired_camera_position.y, camera_floor)
 	camera.global_position = camera.global_position.lerp(desired_camera_position, minf(delta * 4.4, 1.0))
+	var actual_camera_floor := _terrain_height(camera.global_position.x, camera.global_position.z) + 1.1
+	camera.global_position.y = maxf(camera.global_position.y, actual_camera_floor)
 	camera.look_at(target, Vector3.UP)
 	if creature and not creature_captured:
 		creature.rotate_y(delta * 0.55)

@@ -389,7 +389,7 @@ func _build_biome_ground_cover(rng: RandomNumberGenerator) -> void:
 func _build_biome_floor_patches() -> void:
 	# Camadas discretas de chão ajudam a separar visualmente os biomas.
 	# As malhas seguem o relevo e têm bordas orgânicas, sem círculos perfeitos.
-	var forest_centers := [Vector2(-43.0, -39.0), Vector2(43.0, -37.0), Vector2(-46.0, 39.0), Vector2(45.0, 40.0)]
+	var forest_centers := [Vector2(-31.0, -29.0), Vector2(31.0, -29.0), Vector2(-34.0, 34.0), Vector2(34.0, 34.0)]
 	for i in range(forest_centers.size()):
 		_add_biome_floor_patch(forest_centers[i], 11.5, 9.0, Color(0.23, 0.29, 0.15), 210 + i)
 	var meadow_centers := [Vector2(-37.0, 8.0), Vector2(35.0, 28.0)]

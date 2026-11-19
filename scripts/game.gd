@@ -854,11 +854,9 @@ func _build_terrain() -> void:
 	terrain_body.collision_mask = 1
 	var terrain_collision := CollisionShape3D.new()
 	terrain_collision.name = "TerrainMeshCollision"
-	var terrain_shape := terrain_mesh.mesh.create_trimesh_shape() as ConcavePolygonShape3D
-	# Permite consultas físicas também pelo verso dos triângulos; evita falhas
-	# de raycast em superfícies triangulares geradas dinamicamente.
-	terrain_shape.backface_collision_enabled = true
-	terrain_collision.shape = terrain_shape
+	# A forma triangular é estática e acompanha exatamente a malha renderizada.
+	# O raycast de diagnóstico habilita hit_back_faces na própria consulta.
+	terrain_collision.shape = terrain_mesh.mesh.create_trimesh_shape()
 	terrain_body.add_child(terrain_collision)
 	add_child(terrain_body)
 

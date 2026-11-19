@@ -86,6 +86,9 @@ func _run_tests() -> void:
 			if hit.is_empty():
 				_fail("Sem colisão do chão no ponto (%s, %s)." % [x, z])
 				return
+			if hit.get("collider") != terrain_body:
+				_fail("O raio atingiu outro corpo em (%s, %s), não a malha de colisão do terreno." % [x, z])
+				return
 			var actual_height: float = hit.position.y
 			if absf(actual_height - expected_height) > HEIGHT_TOLERANCE:
 				_fail("Colisão diverge do relevo em (%s, %s): esperado %.3f, obtido %.3f." % [x, z, expected_height, actual_height])

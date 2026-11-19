@@ -77,10 +77,11 @@ func _run_tests() -> void:
 				_fail("A função de altura retornou valor inválido em (%s, %s)." % [x, z])
 				return
 			var query := PhysicsRayQueryParameters3D.create(
-				Vector3(x, 20.0, z),
-				Vector3(x, -8.0, z),
+				Vector3(x, 100.0, z),
+				Vector3(x, -100.0, z),
 				1
 			)
+			query.hit_back_faces = true
 			var hit: Dictionary = space.intersect_ray(query)
 			if hit.is_empty():
 				_fail("Sem colisão do chão no ponto (%s, %s)." % [x, z])

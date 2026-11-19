@@ -6,6 +6,8 @@ const CAMERA_DISTANCE := 6.5
 
 var player: CharacterBody3D
 var player_model: Node3D
+var player_arm_parts: Array[MeshInstance3D] = []
+var player_leg_parts: Array[MeshInstance3D] = []
 var camera: Camera3D
 var creature: Node3D
 var creature_home := Vector3(2.5, 0.72, -9.0)
@@ -109,6 +111,12 @@ func _physics_process(delta: float) -> void:
 		var gait := sin(Time.get_ticks_msec() * 0.012) if moving else 0.0
 		player_model.position.y = absf(gait) * 0.045
 		player_model.rotation.z = lerpf(player_model.rotation.z, gait * 0.025, min(delta * 8.0, 1.0))
+		for arm_index in range(player_arm_parts.size()):
+			var arm_target := gait * 0.42 * (1.0 if arm_index == 0 else -1.0) if moving else 0.0
+			player_arm_parts[arm_index].rotation.x = lerpf(player_arm_parts[arm_index].rotation.x, arm_target, minf(delta * 9.0, 1.0))
+		for leg_index in range(player_leg_parts.size()):
+			var leg_target := gait * 0.58 * (1.0 if leg_index == 0 else -1.0) if moving else 0.0
+			player_leg_parts[leg_index].rotation.x = lerpf(player_leg_parts[leg_index].rotation.x, leg_target, minf(delta * 9.0, 1.0))
 	if direction.length() > 0.1:
 		player.rotation.y = lerp_angle(player.rotation.y, atan2(direction.x, direction.z) + PI, min(delta * TURN_SPEED, 1.0))
 
@@ -793,10 +801,13 @@ func _build_player() -> void:
 	_add_box(player_model, Vector3(0, 1.22, -0.31), Vector3(0.48, 0.52, 0.22), Color(0.63, 0.25, 0.10), false)
 	_add_box(player_model, Vector3(-0.18, 1.26, 0.25), Vector3(0.055, 0.42, 0.055), Color(0.91, 0.75, 0.42), false)
 	_add_box(player_model, Vector3(0.18, 1.26, 0.25), Vector3(0.055, 0.42, 0.055), Color(0.91, 0.75, 0.42), false)
-	for side in [-1.0, 1.0]:
-		_add_capsule_part(player_model, Vector3(side * 0.43, 1.18, 0), Vector3(0.13, 0.40, 0.13), Color(0.82, 0.57, 0.42))
+	for side_index in range(2):
+		var side := -1.0 if side_index == 0 else 1.0
+		var arm := _add_capsule_part(player_model, Vector3(side * 0.43, 1.18, 0), Vector3(0.13, 0.40, 0.13), Color(0.82, 0.57, 0.42))
+		player_arm_parts.append(arm)
 		_add_box(player_model, Vector3(side * 0.45, 0.91, 0.02), Vector3(0.20, 0.13, 0.19), Color(0.18, 0.20, 0.23), false)
-		_add_capsule_part(player_model, Vector3(side * 0.19, 0.32, 0), Vector3(0.16, 0.42, 0.17), Color(0.12, 0.18, 0.27))
+		var leg := _add_capsule_part(player_model, Vector3(side * 0.19, 0.32, 0), Vector3(0.16, 0.42, 0.17), Color(0.12, 0.18, 0.27))
+		player_leg_parts.append(leg)
 		_add_box(player_model, Vector3(side * 0.19, 0.10, 0.11), Vector3(0.32, 0.16, 0.42), Color(0.08, 0.09, 0.11), false)
 	_add_faceted_part(player_model, Vector3(0, 1.91, 0.275), Vector3(0.045, 0.045, 0.035), Color(0.10, 0.09, 0.08))
 	_add_faceted_part(player_model, Vector3(0.16, 1.97, 0.26), Vector3(0.035, 0.045, 0.025), Color(0.10, 0.09, 0.08))
@@ -1019,7 +1030,7 @@ func _add_sphere_part(parent: Node3D, pos: Vector3, size: Vector3, color: Color)
 	part.material_override = _mat(color)
 	parent.add_child(part)
 
-func _add_capsule_part(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> void:
+func _add_capsule_part(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> MeshInstance3D:
 	var part := MeshInstance3D.new()
 	var mesh := CapsuleMesh.new()
 	mesh.radius = 0.5
@@ -1031,6 +1042,7 @@ func _add_capsule_part(parent: Node3D, pos: Vector3, size: Vector3, color: Color
 	part.scale = size
 	part.material_override = _mat(color)
 	parent.add_child(part)
+	return part
 
 func _mat(color: Color) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()

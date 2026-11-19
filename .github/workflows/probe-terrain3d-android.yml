@@ -1,0 +1,28 @@
+name: Probe Terrain3D Android compatibility
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-addon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download Terrain3D v1.0.2 for Godot 4.4
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://github.com/TokisanGames/Terrain3D/releases/download/v1.0.2-stable/Terrain3D_v1.0.2-stable.zip"
+          curl --fail --location --retry 3 "$URL" --output "$RUNNER_TEMP/terrain3d.zip"
+          echo "a071850250ec5e596aa54da61c01d75768774eb379ee997584d426a45f4884a2  $RUNNER_TEMP/terrain3d.zip" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/terrain3d"
+          unzip -q "$RUNNER_TEMP/terrain3d.zip" -d "$RUNNER_TEMP/terrain3d"
+          echo "Terrain3D package contents:"
+          find "$RUNNER_TEMP/terrain3d" -type f | grep -E '\.(gdextension|so|dll|dylib)$' | sort
+          echo "Android/ARM64 candidates:"
+          find "$RUNNER_TEMP/terrain3d" -type f | grep -Ei 'android|arm64|aarch64' || true
+          echo "GDExtension descriptors:"
+          find "$RUNNER_TEMP/terrain3d" -name '*.gdextension' -type f -print -exec sed -n '1,180p' {} \;

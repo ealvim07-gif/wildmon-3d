@@ -195,7 +195,7 @@ func _build_world() -> void:
 	_build_biome_details(rng)
 
 func _build_biome_details(rng: RandomNumberGenerator) -> void:
-	# Afloramento rochoso: agrupamentos assimétricos em vez de pedras uniformemente espalhadas.
+	# Afloramentos rochosos assimétricos, com pedras de tamanhos variados.
 	var outcrop_centers := [Vector2(48.0, 4.0), Vector2(-48.0, -5.0), Vector2(8.0, 49.0)]
 	for center_index in range(outcrop_centers.size()):
 		var center: Vector2 = outcrop_centers[center_index]
@@ -205,6 +205,7 @@ func _build_biome_details(rng: RandomNumberGenerator) -> void:
 			var px := center.x + cos(angle) * radius * rng.randf_range(0.65, 1.25)
 			var pz := center.y + sin(angle) * radius
 			_add_rock(Vector3(px, _terrain_height(px, pz), pz), 180 + center_index * 17 + i)
+
 	# Clareiras floridas com bordas irregulares e vegetação baixa.
 	var meadow_centers := [Vector2(-37.0, 8.0), Vector2(35.0, 28.0)]
 	for center_index in range(meadow_centers.size()):
@@ -217,6 +218,39 @@ func _build_biome_details(rng: RandomNumberGenerator) -> void:
 			_add_plant(Vector3(px, _terrain_height(px, pz), pz), 240 + center_index * 23 + i)
 			if i % 2 == 0:
 				_add_grass_tuft(Vector3(px + 0.45, _terrain_height(px + 0.45, pz), pz), 300 + i)
+
+	# Moitas de samambaias em baixadas úmidas, com distribuição em pequenos grupos.
+	var fern_centers := [Vector2(-25.0, -22.0), Vector2(26.0, -18.0), Vector2(-5.0, 43.0)]
+	for center_index in range(fern_centers.size()):
+		var center: Vector2 = fern_centers[center_index]
+		for i in range(10):
+			var angle := rng.randf_range(0.0, TAU)
+			var radius := sqrt(rng.randf()) * 7.0
+			var px := center.x + cos(angle) * radius * 1.25
+			var pz := center.y + sin(angle) * radius * 0.72
+			_add_fern(Vector3(px, _terrain_height(px, pz), pz), 520 + center_index * 13 + i)
+
+	# Faixas de cascalho acompanham as cristas, em vez de formar círculos perfeitos.
+	for ridge_index in range(2):
+		for i in range(12):
+			var t := float(i) / 11.0
+			var px := -54.0 + t * 108.0
+			var pz := (ridge_index == 0 ? 20.0 : -43.0) + sin(t * TAU * 1.4 + ridge_index) * 5.5
+			px += rng.randf_range(-2.0, 2.0)
+			pz += rng.randf_range(-2.5, 2.5)
+			_add_rock(Vector3(px, _terrain_height(px, pz), pz), 580 + ridge_index * 19 + i)
+
+func _add_fern(pos: Vector3, seed: int) -> void:
+	var fern_scene := _get_nature_scene(["Fern_1", "Bush_Common", "Bush001"], seed)
+	if fern_scene:
+		var fern := fern_scene.instantiate() as Node3D
+		add_child(fern)
+		fern.position = pos
+		var scale_factor := 0.42 + float(seed % 5) * 0.09
+		fern.scale = Vector3.ONE * scale_factor
+		fern.rotation.y = float(seed * 43 % 360) * PI / 180.0
+		return
+	_add_plant(pos, seed)
 
 func _build_trail() -> void:
 	var points := [
@@ -366,14 +400,16 @@ func _make_terrain_texture(asset_name: String, base_color: Color, accent_color: 
 
 func _terrain_height(x: float, z: float) -> float:
 	var edge_factor := clampf((maxf(absf(x), absf(z)) - 4.0) / 25.0, 0.0, 1.0)
-	# Ondas cruzadas e cristas alongadas quebram o padrão de colinas circulares.
-	var rolling := sin(x * 0.105 + z * 0.072) * 0.62 + cos(z * 0.091 - x * 0.063) * 0.48
-	var warped_x := x + sin(z * 0.075) * 3.2
-	var ridge_a := pow(1.0 - absf(sin((warped_x + z * 0.22) * 0.082)), 2.2) * 1.55
-	var ridge_b := pow(1.0 - absf(sin((x * 0.17 - z * 0.31 + 11.0) * 0.071)), 2.8) * 0.92
-	var detail := sin(x * 0.31 + z * 0.19) * 0.16 + cos(z * 0.27 - x * 0.23) * 0.13
-	var erosion := -absf(sin(x * 0.045 + z * 0.031)) * 0.24
-	return maxf(-0.28, (rolling + ridge_a + ridge_b + detail + erosion) * edge_factor)
+	# Relevo com cristas compridas, ombros assimétricos e pequenos vales de erosão.
+	var rolling := sin(x * 0.105 + z * 0.072) * 0.48 + cos(z * 0.091 - x * 0.063) * 0.38
+	var warped_x := x + sin(z * 0.075) * 3.2 + cos(z * 0.031) * 2.1
+	var ridge_a := pow(1.0 - absf(sin((warped_x + z * 0.22) * 0.082)), 2.0) * 1.72
+	var ridge_b := pow(1.0 - absf(sin((x * 0.17 - z * 0.31 + 11.0) * 0.071)), 2.5) * 1.05
+	var shoulder := pow(maxf(0.0, cos((x * 0.043 + z * 0.092) + sin(z * 0.035))), 5.0) * 0.42
+	var drainage := -pow(maxf(0.0, 1.0 - absf(sin(x * 0.052 + z * 0.12 + sin(z * 0.04) * 1.3))), 5.0) * 0.62
+	var detail := sin(x * 0.31 + z * 0.19) * 0.19 + cos(z * 0.27 - x * 0.23) * 0.15
+	var erosion := -absf(sin(x * 0.045 + z * 0.031)) * 0.30
+	return maxf(-0.32, (rolling + ridge_a + ridge_b + shoulder + drainage + detail + erosion) * edge_factor)
 
 func _add_reed(pos: Vector3, seed: int) -> void:
 	var reed_scene := _get_nature_scene(["Reed001", "Reed002"], seed)

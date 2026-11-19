@@ -271,7 +271,7 @@ func _build_terrain() -> void:
 	terrain.region_size = 256
 	terrain.mesh_lods = 6
 	terrain.mesh_size = 32
-	terrain.collision.mode = Terrain3DCollision.FULL_GAME
+	terrain.collision_mode = Terrain3DCollision.FULL_GAME
 	add_child(terrain)
 
 	terrain.material.world_background = Terrain3DMaterial.NONE

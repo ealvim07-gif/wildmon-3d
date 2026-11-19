@@ -35,6 +35,7 @@ var touch_right := false
 var touch_forward := false
 var touch_back := false
 var camera_drag_active := false
+var camera_touch_index := -1
 
 func _ready() -> void:
 	_build_world()
@@ -46,19 +47,27 @@ func _ready() -> void:
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
+		var screen_size := get_viewport().get_visible_rect().size
 		if event.pressed:
-			var screen_size := get_viewport().get_visible_rect().size
-			camera_drag_active = event.position.x > screen_size.x * 0.42 and event.position.y < screen_size.y * 0.84
-		else:
+			# A câmera usa somente a área livre do lado direito, sem disputar
+			# os botões de movimento e captura na parte inferior.
+			var in_camera_area := event.position.x > screen_size.x * 0.44
+			in_camera_area = in_camera_area and event.position.y > screen_size.y * 0.17
+			in_camera_area = in_camera_area and event.position.y < screen_size.y * 0.66
+			if in_camera_area and camera_touch_index == -1:
+				camera_touch_index = event.index
+				camera_drag_active = true
+		elif event.index == camera_touch_index:
+			camera_touch_index = -1
 			camera_drag_active = false
-	elif event is InputEventScreenDrag and camera_drag_active:
+	elif event is InputEventScreenDrag and camera_drag_active and event.index == camera_touch_index:
 		target_look_yaw -= event.relative.x * CAMERA_SENSITIVITY
-		target_look_pitch = clampf(target_look_pitch + event.relative.y * CAMERA_SENSITIVITY, -0.58, 0.82)
+		target_look_pitch = clampf(target_look_pitch + event.relative.y * CAMERA_SENSITIVITY, -0.62, 0.88)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		camera_drag_active = event.pressed
 	elif event is InputEventMouseMotion and camera_drag_active and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		target_look_yaw -= event.relative.x * CAMERA_SENSITIVITY
-		target_look_pitch = clampf(target_look_pitch + event.relative.y * CAMERA_SENSITIVITY, -0.58, 0.82)
+		target_look_pitch = clampf(target_look_pitch + event.relative.y * CAMERA_SENSITIVITY, -0.62, 0.88)
 
 func _process(delta: float) -> void:
 	if player == null:

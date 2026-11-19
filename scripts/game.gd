@@ -88,8 +88,7 @@ func _physics_process(delta: float) -> void:
 func _build_world() -> void:
 	var world_env := WorldEnvironment.new()
 	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.24, 0.55, 0.88)
+	env.background_mode = Environment.BG_SKY
 	env.background_energy_multiplier = 1.0
 	var sky := Sky.new()
 	var sky_mat := ProceduralSkyMaterial.new()
@@ -97,12 +96,14 @@ func _build_world() -> void:
 	sky_mat.sky_horizon_color = Color(0.48, 0.72, 0.91)
 	sky_mat.ground_bottom_color = Color(0.16, 0.22, 0.16)
 	sky_mat.ground_horizon_color = Color(0.62, 0.70, 0.59)
+	sky_mat.sun_angle_max = 18.0
+	sky_mat.sun_curve = 0.12
 	sky.sky_material = sky_mat
 	env.sky = sky
 	env.ambient_light_sky_contribution = 0.0
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ambient_light_color = Color(0.72, 0.82, 0.91)
-	env.ambient_light_energy = 0.9
+	env.ambient_light_energy = 0.85
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	world_env.environment = env
 	add_child(world_env)
@@ -171,6 +172,46 @@ func _build_world() -> void:
 		if abs(px) < 6.0 and pz < 10.0 and pz > -28.0:
 			continue
 		_add_plant(Vector3(px, 0, pz), i)
+
+	# Extra rocks and grass tufts add detail without external assets.
+	for i in range(28):
+		var rx := float((i * 23) % 66) - 33.0
+		var rz := float((i * 31) % 68) - 34.0
+		if abs(rx) < 9.0 and rz < 12.0 and rz > -30.0:
+			continue
+		_add_rock(Vector3(rx, 0, rz), i)
+
+	for i in range(85):
+		var gx := float((i * 11) % 70) - 35.0
+		var gz := float((i * 17) % 70) - 35.0
+		if abs(gx) < 7.0 and gz < 12.0 and gz > -30.0:
+			continue
+		_add_grass_tuft(Vector3(gx, 0, gz), i)
+
+
+func _add_rock(pos: Vector3, seed: int) -> void:
+	var rock := MeshInstance3D.new()
+	var rock_mesh := SphereMesh.new()
+	rock_mesh.radial_segments = 6
+	rock_mesh.rings = 3
+	rock.mesh = rock_mesh
+	rock.position = pos + Vector3(0, 0.18, 0)
+	var width := 0.35 + float(seed % 4) * 0.12
+	rock.scale = Vector3(width, 0.22 + float(seed % 3) * 0.08, width * 0.82)
+	rock.rotation_degrees = Vector3(float(seed * 13 % 25), float(seed * 37 % 360), float(seed * 7 % 18))
+	rock.material_override = _mat([Color(0.39, 0.42, 0.39), Color(0.48, 0.46, 0.40), Color(0.32, 0.36, 0.34)][seed % 3])
+	add_child(rock)
+
+func _add_grass_tuft(pos: Vector3, seed: int) -> void:
+	for blade in range(3):
+		var grass := MeshInstance3D.new()
+		var grass_mesh := BoxMesh.new()
+		grass_mesh.size = Vector3(0.055, 0.28 + float((seed + blade) % 3) * 0.06, 0.045)
+		grass.mesh = grass_mesh
+		grass.position = pos + Vector3((float(blade) - 1.0) * 0.09, grass_mesh.size.y * 0.5, 0.0)
+		grass.rotation_degrees = Vector3(0, float(blade) * 60.0 + float(seed % 30), float(blade - 1) * 18.0)
+		grass.material_override = _mat([Color(0.22, 0.42, 0.16), Color(0.32, 0.50, 0.19), Color(0.42, 0.53, 0.22)][(seed + blade) % 3])
+		add_child(grass)
 
 func _add_tree(pos: Vector3) -> void:
 	var trunk := MeshInstance3D.new()

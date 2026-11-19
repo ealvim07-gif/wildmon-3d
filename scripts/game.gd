@@ -45,7 +45,8 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		camera_drag_active = event.pressed
 	elif event is InputEventMouseMotion and camera_drag_active and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		look_yaw -= event.relative.x * 0.008
+		target_look_yaw -= event.relative.x * CAMERA_SENSITIVITY
+		target_look_pitch = clampf(target_look_pitch + event.relative.y * CAMERA_SENSITIVITY, -0.34, 0.82)
 
 func _process(delta: float) -> void:
 	if player == null:

@@ -241,6 +241,24 @@ func _build_biome_details(rng: RandomNumberGenerator) -> void:
 			pz += rng.randf_range(-2.5, 2.5)
 			_add_rock(Vector3(px, _terrain_height(px, pz), pz), 580 + ridge_index * 19 + i)
 
+	# Madeira caída e galhos quebrados dão escala e quebram a repetição das árvores.
+	var fallen_logs := [
+		[Vector2(-52.0, -27.0), Vector2(-46.0, -24.5), 0.19],
+		[Vector2(39.0, -48.0), Vector2(45.0, -43.5), 0.22],
+		[Vector2(-43.0, 47.0), Vector2(-37.0, 43.5), 0.17],
+		[Vector2(48.0, 31.0), Vector2(53.0, 27.0), 0.20],
+		[Vector2(-8.0, -51.0), Vector2(-2.0, -48.0), 0.16]
+	]
+	for i in range(fallen_logs.size()):
+		var log_data: Array = fallen_logs[i]
+		var start: Vector2 = log_data[0]
+		var finish: Vector2 = log_data[1]
+		_add_fallen_log(
+			Vector3(start.x, _terrain_height(start.x, start.y), start.y),
+			Vector3(finish.x, _terrain_height(finish.x, finish.y), finish.y),
+			float(log_data[2]), 700 + i
+		)
+
 func _add_fern(pos: Vector3, seed: int) -> void:
 	var fern_scene := _get_nature_scene(["Fern_1", "Bush_Common", "Bush001"], seed)
 	if fern_scene:
@@ -252,6 +270,37 @@ func _add_fern(pos: Vector3, seed: int) -> void:
 		fern.rotation.y = float(seed * 43 % 360) * PI / 180.0
 		return
 	_add_plant(pos, seed)
+
+func _add_fallen_log(start: Vector3, finish: Vector3, radius: float, seed: int) -> void:
+	var direction := finish - start
+	var midpoint := (start + finish) * 0.5
+	var log := MeshInstance3D.new()
+	var log_mesh := CylinderMesh.new()
+	log_mesh.top_radius = radius * 0.78
+	log_mesh.bottom_radius = radius
+	log_mesh.height = direction.length()
+	log_mesh.radial_segments = 6
+	log_mesh.rings = 1
+	log.mesh = log_mesh
+	log.position = midpoint + Vector3(0.0, radius * 0.58, 0.0)
+	log.quaternion = Quaternion(Vector3.UP, direction.normalized())
+	log.material_override = _mat(Color(0.25, 0.16, 0.085) if seed % 2 == 0 else Color(0.34, 0.22, 0.11))
+	add_child(log)
+
+	# Um galho curto e anguloso em parte dos troncos, sem criar excesso de polígonos.
+	if seed % 2 == 0:
+		var branch := MeshInstance3D.new()
+		var branch_mesh := CylinderMesh.new()
+		branch_mesh.top_radius = 0.018
+		branch_mesh.bottom_radius = radius * 0.42
+		branch_mesh.height = 0.72
+		branch_mesh.radial_segments = 5
+		branch_mesh.rings = 1
+		branch.mesh = branch_mesh
+		branch.position = midpoint + Vector3(0.0, radius * 0.72, 0.0) + direction.normalized() * 0.18
+		branch.rotation = Vector3(0.0, 0.0, -0.82)
+		branch.material_override = log.material_override
+		add_child(branch)
 
 func _build_trail() -> void:
 	var points := [

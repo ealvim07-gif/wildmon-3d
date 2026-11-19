@@ -47,12 +47,25 @@ func _run_tests() -> void:
 	if vertices.is_empty() or normals.size() != vertices.size():
 		_fail("A malha do terreno está vazia ou sem normais.")
 		return
-	var downward_normals := 0
+	var invalid_normals := 0
 	for normal in normals:
-		if normal.y < 0.0:
-			downward_normals += 1
-	if float(downward_normals) / float(normals.size()) > 0.01:
-		_fail("Mais de 1% das normais do terreno apontam para baixo.")
+		if not is_finite(normal.x) or not is_finite(normal.y) or not is_finite(normal.z) or normal.length_squared() < 0.9 or normal.y <= 0.0:
+			invalid_normals += 1
+	if invalid_normals > 0:
+		_fail("%d normais do terreno são inválidas ou não apontam para cima." % invalid_normals)
+		return
+
+	# Confere também a orientação geométrica real dos triângulos, não apenas
+	# as normais armazenadas na malha.
+	var inverted_faces := 0
+	var triangle_count := int(vertices.size() / 3)
+	for triangle in range(triangle_count):
+		var base := triangle * 3
+		var face_normal := (vertices[base + 1] - vertices[base]).cross(vertices[base + 2] - vertices[base])
+		if face_normal.length_squared() < 0.000001 or face_normal.y <= 0.0:
+			inverted_faces += 1
+	if inverted_faces > 0:
+		_fail("%d triângulos do terreno têm orientação inválida." % inverted_faces)
 		return
 
 	var space: PhysicsDirectSpaceState3D = game.get_world_3d().direct_space_state

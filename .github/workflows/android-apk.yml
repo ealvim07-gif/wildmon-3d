@@ -13,7 +13,7 @@ jobs:
   validate-project:
     name: Validate Godot project without exporting
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Checkout project
         uses: actions/checkout@v4
@@ -29,6 +29,61 @@ jobs:
           GODOT="$RUNNER_TEMP/Godot_v4.4.1-stable_linux.x86_64"
           test -x "$GODOT" || chmod +x "$GODOT"
           "$GODOT" --version
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install and verify Android SDK prerequisites (no export)
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [ -z "$SDK_ROOT" ]; then
+            echo "Android SDK root is not configured on the runner."
+            exit 1
+          fi
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager was not found on the runner."
+            exit 1
+          fi
+          java -version
+          "$SDKMANAGER" --version
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null
+          "$SDKMANAGER" --sdk_root="$SDK_ROOT" --install \
+            "platform-tools" \
+            "build-tools;34.0.0" \
+            "platforms;android-34" \
+            "cmdline-tools;latest" \
+            "cmake;3.10.2.4988404" \
+            "ndk;23.2.8568313"
+          test -x "$SDK_ROOT/platform-tools/adb"
+          test -d "$SDK_ROOT/build-tools/34.0.0"
+          test -d "$SDK_ROOT/platforms/android-34"
+          test -d "$SDK_ROOT/ndk/23.2.8568313"
+          test -d "$SDK_ROOT/cmake/3.10.2.4988404"
+          echo "Android SDK prerequisites installed and verified. No APK export was run."
+
+      - name: Install and verify Godot Android export templates (no export)
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 \
+            "https://github.com/godotengine/godot/releases/download/4.4.1-stable/Godot_v4.4.1-stable_export_templates.tpz" \
+            --output "$RUNNER_TEMP/godot-templates.tpz"
+          mkdir -p "$RUNNER_TEMP/godot-templates"
+          unzip -q "$RUNNER_TEMP/godot-templates.tpz" -d "$RUNNER_TEMP/godot-templates"
+          TEMPLATE_SOURCE="$RUNNER_TEMP/godot-templates/templates"
+          TEMPLATE_DEST="$HOME/.local/share/godot/export_templates/4.4.1.stable"
+          test -d "$TEMPLATE_SOURCE"
+          mkdir -p "$TEMPLATE_DEST"
+          cp -a "$TEMPLATE_SOURCE/." "$TEMPLATE_DEST/"
+          test -s "$TEMPLATE_DEST/android_debug.apk"
+          test -s "$TEMPLATE_DEST/android_release.apk"
+          echo "Godot Android debug and release templates are installed and verified. No APK export was run."
 
       - name: Check GDScript syntax
         shell: bash

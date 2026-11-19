@@ -89,8 +89,8 @@ func _physics_process(delta: float) -> void:
 		player.velocity.y = 0
 	player.move_and_slide()
 	var bounded_position := player.global_position
-	bounded_position.x = clampf(bounded_position.x, -33.0, 33.0)
-	bounded_position.z = clampf(bounded_position.z, -33.0, 33.0)
+	bounded_position.x = clampf(bounded_position.x, -66.0, 66.0)
+	bounded_position.z = clampf(bounded_position.z, -66.0, 66.0)
 	if bounded_position != player.global_position:
 		player.global_position = bounded_position
 		player.velocity.x = 0.0
@@ -144,7 +144,7 @@ func _build_world() -> void:
 	add_child(ground_body)
 	var ground_shape := CollisionShape3D.new()
 	var ground_box := BoxShape3D.new()
-	ground_box.size = Vector3(78, 1.0, 78)
+	ground_box.size = Vector3(148, 1.0, 148)
 	ground_shape.shape = ground_box
 	ground_body.add_child(ground_shape)
 
@@ -154,26 +154,26 @@ func _build_world() -> void:
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 81027
-	for i in range(46):
-		var px := rng.randf_range(-34.0, 34.0)
-		var pz := rng.randf_range(-35.0, 35.0)
+	for i in range(104):
+		var px := rng.randf_range(-65.0, 65.0)
+		var pz := rng.randf_range(-66.0, 66.0)
 		if absf(px) < 9.0 and pz < 11.0 and pz > -31.0:
 			continue
 		_add_tree(Vector3(px, _terrain_height(px, pz), pz), i)
-	for i in range(92):
-		var px := rng.randf_range(-36.0, 36.0)
+	for i in range(150):
+		var px := rng.randf_range(-66.0, 66.0)
 		var pz := rng.randf_range(-36.0, 36.0)
 		if absf(px) < 7.0 and pz < 12.0 and pz > -31.0:
 			continue
 		_add_plant(Vector3(px, _terrain_height(px, pz), pz), i)
-	for i in range(34):
+	for i in range(58):
 		var px := rng.randf_range(-35.0, 35.0)
 		var pz := rng.randf_range(-35.0, 35.0)
 		if absf(px) < 9.0 and pz < 12.0 and pz > -30.0:
 			continue
 		_add_rock(Vector3(px, _terrain_height(px, pz), pz), i)
-	for i in range(110):
-		var px := rng.randf_range(-37.0, 37.0)
+	for i in range(190):
+		var px := rng.randf_range(-67.0, 67.0)
 		var pz := rng.randf_range(-37.0, 37.0)
 		if absf(px) < 8.0 and pz < 12.0 and pz > -31.0:
 			continue
@@ -224,7 +224,7 @@ func _build_distant_ridges() -> void:
 		mesh.rings = 1
 		ridge.mesh = mesh
 		var angle := TAU * float(i) / 12.0
-		ridge.position = Vector3(cos(angle) * 43.0, mesh.height * 0.40 - 1.0, sin(angle) * 43.0)
+		ridge.position = Vector3(cos(angle) * 76.0, mesh.height * 0.40 - 1.0, sin(angle) * 76.0)
 		ridge.rotation.y = angle * 0.37
 		ridge.material_override = _mat([Color(0.20, 0.32, 0.26), Color(0.25, 0.37, 0.29), Color(0.29, 0.39, 0.31)][i % 3])
 		add_child(ridge)
@@ -261,8 +261,8 @@ func _build_waterhole() -> void:
 func _build_terrain() -> void:
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var divisions := 112
-	var world_size := 76.0
+	var divisions := 160
+	var world_size := 144.0
 	for z in range(divisions):
 		for x in range(divisions):
 			var x0 := -world_size * 0.5 + world_size * float(x) / float(divisions)

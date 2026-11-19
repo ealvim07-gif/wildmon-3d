@@ -12,6 +12,11 @@ var creature_home := Vector3(2.5, 0.72, -9.0)
 var creature_captured := false
 var creature_in_range := false
 var look_yaw := 0.0
+var target_look_yaw := 0.0
+var look_pitch := 0.28
+var target_look_pitch := 0.28
+const CAMERA_SENSITIVITY := 0.0026
+var nature_model_cache: Dictionary = {}
 var status_label: Label
 var capture_button: Button
 var touch_left := false
@@ -35,7 +40,8 @@ func _input(event: InputEvent) -> void:
 		else:
 			camera_drag_active = false
 	elif event is InputEventScreenDrag and camera_drag_active:
-		look_yaw -= event.relative.x * 0.008
+		target_look_yaw -= event.relative.x * CAMERA_SENSITIVITY
+		target_look_pitch = clampf(target_look_pitch + event.relative.y * CAMERA_SENSITIVITY, -0.34, 0.82)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		camera_drag_active = event.pressed
 	elif event is InputEventMouseMotion and camera_drag_active and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
@@ -44,9 +50,12 @@ func _input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	if player == null:
 		return
+	look_yaw = lerp_angle(look_yaw, target_look_yaw, minf(delta * 7.0, 1.0))
+	look_pitch = lerpf(look_pitch, target_look_pitch, minf(delta * 7.0, 1.0))
 	var target := player.global_position + Vector3(0, 1.25, 0)
-	var cam_offset := Vector3(sin(look_yaw) * CAMERA_DISTANCE, 3.0, cos(look_yaw) * CAMERA_DISTANCE)
-	camera.global_position = camera.global_position.lerp(target + cam_offset, min(delta * 5.0, 1.0))
+	var horizontal := cos(look_pitch) * CAMERA_DISTANCE
+	var cam_offset := Vector3(sin(look_yaw) * horizontal, sin(look_pitch) * CAMERA_DISTANCE, cos(look_yaw) * horizontal)
+	camera.global_position = camera.global_position.lerp(target + cam_offset, minf(delta * 5.5, 1.0))
 	camera.look_at(target, Vector3.UP)
 	if creature and not creature_captured:
 		creature.rotate_y(delta * 0.55)
@@ -144,25 +153,25 @@ func _build_world() -> void:
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 81027
-	for i in range(68):
+	for i in range(46):
 		var px := rng.randf_range(-34.0, 34.0)
 		var pz := rng.randf_range(-35.0, 35.0)
 		if absf(px) < 9.0 and pz < 11.0 and pz > -31.0:
 			continue
 		_add_tree(Vector3(px, _terrain_height(px, pz), pz), i)
-	for i in range(130):
+	for i in range(92):
 		var px := rng.randf_range(-36.0, 36.0)
 		var pz := rng.randf_range(-36.0, 36.0)
 		if absf(px) < 7.0 and pz < 12.0 and pz > -31.0:
 			continue
 		_add_plant(Vector3(px, _terrain_height(px, pz), pz), i)
-	for i in range(54):
+	for i in range(34):
 		var px := rng.randf_range(-35.0, 35.0)
 		var pz := rng.randf_range(-35.0, 35.0)
 		if absf(px) < 9.0 and pz < 12.0 and pz > -30.0:
 			continue
 		_add_rock(Vector3(px, _terrain_height(px, pz), pz), i)
-	for i in range(260):
+	for i in range(110):
 		var px := rng.randf_range(-37.0, 37.0)
 		var pz := rng.randf_range(-37.0, 37.0)
 		if absf(px) < 8.0 and pz < 12.0 and pz > -31.0:
@@ -203,16 +212,20 @@ func _build_trail() -> void:
 	add_child(trail)
 
 func _build_distant_ridges() -> void:
-	for i in range(9):
+	# Silhuetas facetadas em vez de montes esféricos repetidos.
+	for i in range(12):
 		var ridge := MeshInstance3D.new()
-		var mesh := SphereMesh.new()
-		mesh.radial_segments = 12
-		mesh.rings = 6
+		var mesh := CylinderMesh.new()
+		mesh.top_radius = 0.15 + float(i % 3) * 0.22
+		mesh.bottom_radius = 7.0 + float(i % 4) * 2.0
+		mesh.height = 10.0 + float(i % 5) * 2.5
+		mesh.radial_segments = 7 + (i % 3)
+		mesh.rings = 1
 		ridge.mesh = mesh
-		var angle := TAU * float(i) / 9.0
-		ridge.position = Vector3(cos(angle) * 39.0, 1.5 + float(i % 3) * 0.8, sin(angle) * 39.0)
-		ridge.scale = Vector3(12.0 + float(i % 3) * 2.0, 5.0 + float(i % 4), 8.0)
-		ridge.material_override = _mat(Color(0.24, 0.36, 0.29))
+		var angle := TAU * float(i) / 12.0
+		ridge.position = Vector3(cos(angle) * 43.0, mesh.height * 0.40 - 1.0, sin(angle) * 43.0)
+		ridge.rotation.y = angle * 0.37
+		ridge.material_override = _mat([Color(0.20, 0.32, 0.26), Color(0.25, 0.37, 0.29), Color(0.29, 0.39, 0.31)][i % 3])
 		add_child(ridge)
 
 func _build_waterhole() -> void:
@@ -319,89 +332,97 @@ func _terrain_height(x: float, z: float) -> float:
 	return maxf(-0.12, (rolling + detail + ridge_a + ridge_b) * edge_factor)
 
 func _add_rock(pos: Vector3, seed: int) -> void:
+	var rock_scene := _get_nature_scene(["Rock_Medium_1", "Rock_Medium_2"], seed)
+	if rock_scene:
+		var rock := rock_scene.instantiate() as Node3D
+		add_child(rock)
+		rock.position = pos
+		rock.scale = Vector3.ONE * (0.62 + float(seed % 5) * 0.13)
+		rock.rotation.y = float(seed * 37 % 360) * PI / 180.0
+		return
+	# Fallback usado apenas se a transferência dos modelos não estiver disponível.
 	var rock := MeshInstance3D.new()
 	var rock_mesh := SphereMesh.new()
 	rock_mesh.radial_segments = 6
 	rock_mesh.rings = 3
 	rock.mesh = rock_mesh
 	rock.position = pos + Vector3(0, 0.18, 0)
-	var width := 0.35 + float(seed % 4) * 0.12
-	rock.scale = Vector3(width, 0.22 + float(seed % 3) * 0.08, width * 0.82)
-	rock.rotation_degrees = Vector3(float(seed * 13 % 25), float(seed * 37 % 360), float(seed * 7 % 18))
-	rock.material_override = _mat([Color(0.39, 0.42, 0.39), Color(0.48, 0.46, 0.40), Color(0.32, 0.36, 0.34)][seed % 3])
+	rock.scale = Vector3(0.48, 0.30, 0.40)
+	rock.material_override = _mat(Color(0.39, 0.42, 0.39))
 	add_child(rock)
 
 func _add_grass_tuft(pos: Vector3, seed: int) -> void:
+	var grass_scene := _get_nature_scene(["Grass_Common_Tall", "Clover_1"], seed)
+	if grass_scene:
+		var grass := grass_scene.instantiate() as Node3D
+		add_child(grass)
+		grass.position = pos
+		var scale_factor := 0.48 + float(seed % 5) * 0.10
+		grass.scale = Vector3.ONE * scale_factor
+		grass.rotation.y = float(seed * 29 % 360) * PI / 180.0
+		return
 	for blade in range(3):
 		var grass := MeshInstance3D.new()
 		var grass_mesh := BoxMesh.new()
-		grass_mesh.size = Vector3(0.055, 0.28 + float((seed + blade) % 3) * 0.06, 0.045)
+		grass_mesh.size = Vector3(0.055, 0.28, 0.045)
 		grass.mesh = grass_mesh
-		grass.position = pos + Vector3((float(blade) - 1.0) * 0.09, grass_mesh.size.y * 0.5, 0.0)
-		grass.rotation_degrees = Vector3(0, float(blade) * 60.0 + float(seed % 30), float(blade - 1) * 18.0)
-		grass.material_override = _mat([Color(0.22, 0.42, 0.16), Color(0.32, 0.50, 0.19), Color(0.42, 0.53, 0.22)][(seed + blade) % 3])
+		grass.position = pos + Vector3((float(blade) - 1.0) * 0.09, 0.14, 0.0)
+		grass.rotation_degrees = Vector3(0, float(blade) * 60.0, float(blade - 1) * 18.0)
+		grass.material_override = _mat(Color(0.28, 0.46, 0.18))
 		add_child(grass)
 
 func _add_tree(pos: Vector3, seed: int) -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = seed * 193 + 701
-	var height := rng.randf_range(3.6, 5.4)
-	var width := rng.randf_range(0.82, 1.18)
+	var tree_scene := _get_nature_scene(["CommonTree_1", "CommonTree_2", "CommonTree_3", "Pine_1", "Pine_2"], seed)
+	if tree_scene:
+		var tree := tree_scene.instantiate() as Node3D
+		add_child(tree)
+		tree.position = pos
+		var scale_factor := 0.78 + float(seed % 5) * 0.11
+		tree.scale = Vector3.ONE * scale_factor
+		tree.rotation.y = float(seed * 53 % 360) * PI / 180.0
+		var trunk_body := StaticBody3D.new()
+		trunk_body.position = pos + Vector3(0.0, 1.35 * scale_factor, 0.0)
+		add_child(trunk_body)
+		var trunk_collision := CollisionShape3D.new()
+		var trunk_shape := CylinderShape3D.new()
+		trunk_shape.radius = 0.28 * scale_factor
+		trunk_shape.height = 2.7 * scale_factor
+		trunk_collision.shape = trunk_shape
+		trunk_body.add_child(trunk_collision)
+		return
+	# Fallback geométrico para execução local sem os arquivos externos.
 	var trunk := MeshInstance3D.new()
 	var trunk_mesh := CylinderMesh.new()
-	trunk_mesh.top_radius = 0.12 * width
-	trunk_mesh.bottom_radius = 0.27 * width
-	trunk_mesh.height = height * 0.72
+	trunk_mesh.top_radius = 0.12
+	trunk_mesh.bottom_radius = 0.25
+	trunk_mesh.height = 3.2
 	trunk.mesh = trunk_mesh
-	trunk.position = pos + Vector3(0, height * 0.36, 0)
+	trunk.position = pos + Vector3(0, 1.6, 0)
 	trunk.material_override = _mat(Color(0.25, 0.15, 0.085))
 	add_child(trunk)
 
-	var body := StaticBody3D.new()
-	body.position = pos + Vector3(0, height * 0.32, 0)
-	add_child(body)
-	var collision := CollisionShape3D.new()
-	var shape := CylinderShape3D.new()
-	shape.radius = 0.34 * width
-	shape.height = height * 0.66
-	collision.shape = shape
-	body.add_child(collision)
-
-	for branch_index in range(3):
-		var branch := MeshInstance3D.new()
-		var branch_mesh := CylinderMesh.new()
-		branch_mesh.top_radius = 0.045
-		branch_mesh.bottom_radius = 0.10
-		branch_mesh.height = 1.15
-		branch.mesh = branch_mesh
-		var side := -1.0 if branch_index % 2 == 0 else 1.0
-		branch.position = pos + Vector3(side * (0.28 + branch_index * 0.08), height * (0.49 + branch_index * 0.08), 0.0)
-		branch.rotation_degrees = Vector3(0, float(branch_index) * 120.0, side * -38.0)
-		branch.material_override = trunk.material_override
-		add_child(branch)
-
-	var green := 0.18 + rng.randf_range(0.0, 0.10)
-	var crown_colors := [
-		Color(0.10, green, 0.105),
-		Color(0.13, green + 0.045, 0.12),
-		Color(0.17, green + 0.055, 0.13)
-	]
-	for crown_index in range(11):
-		var crown := MeshInstance3D.new()
-		var crown_mesh := SphereMesh.new()
-		crown_mesh.radial_segments = 12
-		crown_mesh.rings = 8
-		crown.mesh = crown_mesh
-		var angle := TAU * float(crown_index) / 11.0
-		var radius := rng.randf_range(0.25, 0.82) * width
-		var crown_y := height * 0.65 + rng.randf_range(-0.15, 0.75)
-		crown.position = pos + Vector3(cos(angle) * radius, crown_y, sin(angle) * radius)
-		var crown_size := rng.randf_range(0.48, 0.78) * width
-		crown.scale = Vector3(crown_size * 1.05, crown_size * rng.randf_range(0.72, 1.0), crown_size)
-		crown.material_override = _mat(crown_colors[rng.randi_range(0, 2)])
-		add_child(crown)
+func _get_nature_scene(names: Array, seed: int) -> PackedScene:
+	if names.is_empty():
+		return null
+	var model_name: String = names[seed % names.size()]
+	if not nature_model_cache.has(model_name):
+		var path := "res://assets/nature/" + model_name + ".gltf"
+		if ResourceLoader.exists(path):
+			nature_model_cache[model_name] = load(path)
+		else:
+			nature_model_cache[model_name] = null
+	return nature_model_cache[model_name] as PackedScene
 
 func _add_plant(pos: Vector3, seed: int) -> void:
+	var plant_scene := _get_nature_scene(["Fern_1", "Bush_Common", "Clover_1", "Flower_3_Group"], seed)
+	if plant_scene:
+		var plant := plant_scene.instantiate() as Node3D
+		add_child(plant)
+		plant.position = pos
+		var scale_factor := 0.30 + float(seed % 5) * 0.10
+		plant.scale = Vector3.ONE * scale_factor
+		plant.rotation.y = float(seed * 41 % 360) * PI / 180.0
+		return
 	var stem := MeshInstance3D.new()
 	var stem_mesh := CylinderMesh.new()
 	stem_mesh.top_radius = 0.025
@@ -411,16 +432,6 @@ func _add_plant(pos: Vector3, seed: int) -> void:
 	stem.position = pos + Vector3(0, 0.24, 0)
 	stem.material_override = _mat(Color(0.20, 0.38, 0.16))
 	add_child(stem)
-	if seed % 3 == 0:
-		var flower := MeshInstance3D.new()
-		var flower_mesh := SphereMesh.new()
-		flower_mesh.radius = 0.13
-		flower_mesh.height = 0.18
-		flower.mesh = flower_mesh
-		flower.position = pos + Vector3(0, 0.52, 0)
-		flower.material_override = _mat([Color(0.95, 0.72, 0.30), Color(0.92, 0.54, 0.62), Color(0.92, 0.88, 0.70)][seed % 3])
-		add_child(flower)
-
 
 func _build_player() -> void:
 	player = CharacterBody3D.new()
@@ -454,9 +465,9 @@ func _build_player() -> void:
 
 	camera = Camera3D.new()
 	camera.current = true
-	camera.fov = 66
+	camera.fov = 62
 	add_child(camera)
-	camera.global_position = Vector3(0, 4.2, 11.5)
+	camera.global_position = Vector3(0, 3.2, 11.5)
 	camera.look_at(Vector3(0, 1, 0))
 
 func _build_creature() -> void:
@@ -512,7 +523,7 @@ func _build_ui() -> void:
 	vbox.add_theme_constant_override("separation", 3)
 	panel.add_child(vbox)
 	var title := Label.new()
-	title.text = "WILDMON 3D   •   BETA 1.0"
+	title.text = "WILDMON 3D   •   BETA 2.0"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 19)
 	title.add_theme_color_override("font_color", Color(0.91, 0.96, 0.87))

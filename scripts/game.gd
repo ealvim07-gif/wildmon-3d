@@ -115,14 +115,7 @@ func _build_world() -> void:
 	sun.directional_shadow_max_distance = 55.0
 	add_child(sun)
 
-	var ground := MeshInstance3D.new()
-	var ground_mesh := PlaneMesh.new()
-	ground_mesh.size = Vector2(76, 76)
-	ground.mesh = ground_mesh
-	ground.rotation.x = -PI / 2.0
-	ground.position.y = -0.12
-	ground.material_override = _mat(Color(0.29, 0.48, 0.25))
-	add_child(ground)
+	_build_terrain()
 	var ground_body := StaticBody3D.new()
 	ground_body.position.y = -0.32
 	add_child(ground_body)
@@ -189,6 +182,41 @@ func _build_world() -> void:
 		_add_grass_tuft(Vector3(gx, 0, gz), i)
 
 
+func _build_terrain() -> void:
+	# Malha de terreno com ondulações suaves e uma clareira central jogável.
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var divisions := 64
+	var world_size := 76.0
+	for z in range(divisions):
+		for x in range(divisions):
+			var x0 := -world_size * 0.5 + world_size * float(x) / float(divisions)
+			var x1 := -world_size * 0.5 + world_size * float(x + 1) / float(divisions)
+			var z0 := -world_size * 0.5 + world_size * float(z) / float(divisions)
+			var z1 := -world_size * 0.5 + world_size * float(z + 1) / float(divisions)
+			var p00 := Vector3(x0, _terrain_height(x0, z0), z0)
+			var p10 := Vector3(x1, _terrain_height(x1, z0), z0)
+			var p01 := Vector3(x0, _terrain_height(x0, z1), z1)
+			var p11 := Vector3(x1, _terrain_height(x1, z1), z1)
+			surface.add_vertex(p00)
+			surface.add_vertex(p01)
+			surface.add_vertex(p10)
+			surface.add_vertex(p10)
+			surface.add_vertex(p01)
+			surface.add_vertex(p11)
+	surface.generate_normals()
+	var terrain := MeshInstance3D.new()
+	terrain.mesh = surface.commit()
+	terrain.material_override = _mat(Color(0.29, 0.46, 0.24))
+	add_child(terrain)
+
+func _terrain_height(x: float, z: float) -> float:
+	var edge_factor := clampf((maxf(absf(x), absf(z)) - 13.0) / 23.0, 0.0, 1.0)
+	var rolling := sin(x * 0.19 + z * 0.08) * 0.62 + cos(z * 0.17 - x * 0.06) * 0.48
+	var ridge_a := exp(-pow((x + 25.0) / 9.0, 2.0) - pow((z + 7.0) / 24.0, 2.0)) * 2.0
+	var ridge_b := exp(-pow((x - 27.0) / 10.0, 2.0) - pow((z - 8.0) / 22.0, 2.0)) * 1.7
+	return maxf(-0.08, (rolling + ridge_a + ridge_b) * edge_factor)
+
 func _add_rock(pos: Vector3, seed: int) -> void:
 	var rock := MeshInstance3D.new()
 	var rock_mesh := SphereMesh.new()
@@ -233,20 +261,23 @@ func _add_tree(pos: Vector3) -> void:
 	collision.shape = shape
 	body.add_child(collision)
 
+	var green_tone := 0.30 + float(abs(int(pos.x * 13.0 + pos.z * 7.0)) % 5) * 0.018
 	for crown_data in [
-		[Vector3(0, 2.65, 0), 1.15],
-		[Vector3(-0.58, 2.45, 0.08), 0.82],
-		[Vector3(0.58, 2.48, -0.10), 0.86],
-		[Vector3(0.05, 3.25, 0.12), 0.78]
+		[Vector3(0, 2.55, 0), 1.05],
+		[Vector3(-0.62, 2.38, 0.12), 0.78],
+		[Vector3(0.62, 2.42, -0.12), 0.82],
+		[Vector3(0.02, 3.12, 0.10), 0.72],
+		[Vector3(-0.28, 2.82, 0.55), 0.62]
 	]:
 		var crown := MeshInstance3D.new()
-		var crown_mesh := CylinderMesh.new()
-		crown_mesh.top_radius = 0.08
-		crown_mesh.bottom_radius = crown_data[1]
-		crown_mesh.height = crown_data[1] * 2.0
+		var crown_mesh := SphereMesh.new()
+		crown_mesh.radial_segments = 9
+		crown_mesh.rings = 6
 		crown.mesh = crown_mesh
 		crown.position = pos + crown_data[0]
-		crown.material_override = _mat(Color(0.13, 0.34 + float(int(pos.x * 10.0) % 3) * 0.025, 0.18))
+		var crown_size: float = crown_data[1]
+		crown.scale = Vector3(crown_size, crown_size * 0.82, crown_size)
+		crown.material_override = _mat(Color(0.12, green_tone, 0.16))
 		add_child(crown)
 
 func _add_plant(pos: Vector3, seed: int) -> void:
@@ -341,7 +372,7 @@ func _build_ui() -> void:
 	var vbox := VBoxContainer.new()
 	panel.add_child(vbox)
 	var title := Label.new()
-	title.text = "WILDMON 3D  •  BETA 0.3"
+	title.text = "WILDMON 3D  •  BETA 0.5"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 20)
 	vbox.add_child(title)

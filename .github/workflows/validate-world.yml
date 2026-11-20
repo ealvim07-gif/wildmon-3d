@@ -39,30 +39,6 @@ jobs:
             exit 1
           fi
 
-      - name: Inspect character assets and write animation list
-        shell: bash
-        run: |
-          set -euo pipefail
-          "$GODOT" --headless --path "$GITHUB_WORKSPACE" --script scripts/character_asset_check.gd 2>&1 | tee "$RUNNER_TEMP/character-check.log"
-          if grep -E "SCRIPT ERROR|Parse Error|ERROR:|Failed to load" "$RUNNER_TEMP/character-check.log"; then
-            echo "Character asset validation reported an error."
-            exit 1
-          fi
-
-      - name: Commit animation list
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add assets/characters/animations_list.txt
-          if git diff --cached --quiet; then
-            echo "Animation list unchanged; no commit needed."
-            exit 0
-          fi
-          git commit -m "Record imported UAL1 animation names"
-          git push
-
       - name: Assert protagonist GLTF loads
         shell: bash
         run: |

@@ -176,7 +176,9 @@ func _process(delta: float) -> void:
 	var camera_floor := _terrain_height(desired_camera_position.x, desired_camera_position.z) + 4.2
 	desired_camera_position.y = maxf(desired_camera_position.y + 1.8, camera_floor)
 	camera.global_position = camera.global_position.lerp(desired_camera_position, minf(delta * 6.0, 1.0))
-	var actual_camera_floor := _terrain_height(camera.global_position.x, camera.global_position.z) + 3.4
+	# A margem é aplicada após a interpolação, usando a posição final da lente.
+	# Isso impede que a câmera atravesse a encosta durante a transição.
+	var actual_camera_floor := _terrain_height(camera.global_position.x, camera.global_position.z) + 5.0
 	camera.global_position.y = maxf(camera.global_position.y, actual_camera_floor)
 	camera.look_at(target, Vector3.UP)
 	if creature and not creature_captured:

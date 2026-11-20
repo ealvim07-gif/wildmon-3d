@@ -1,5 +1,6 @@
 extends Node3D
-# Terreno por chunks, com textura tiling e colisao triangulada para Android.
+# Terreno por chunks, com textura triplanar e colisao triangulada para Android.
+const DEBUG_TERRAIN_UNSHADED := true # Diagnostico visual temporario deste build.
 const CHUNK_SIZE := 32.0
 const CHUNKS := 8
 const CELLS := 24
@@ -39,6 +40,8 @@ func _ready() -> void:
 	lake_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
 	grass_texture = ImageTexture.create_from_image(_make_grass_texture())
 	_build_chunks()
+	_diagnose_terrain_cover()
+	_adjust_directional_light_bias()
 
 func height_at(x: float, z: float) -> float:
 	var p := Vector2(x,z)
@@ -117,14 +120,20 @@ func _build_chunk(ox:float,oz:float) -> void:
 	var mesh:=st.commit()
 	var ground:=MeshInstance3D.new()
 	ground.mesh=mesh
+	ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var mat:=StandardMaterial3D.new()
 	mat.albedo_texture=grass_texture
 	mat.roughness=1.0
 	mat.texture_filter=BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	mat.uv1_scale=Vector3(1.0,1.0,1.0)
+	mat.uv1_triplanar = true
+	mat.uv1_world_triplanar = true
+	mat.uv1_scale = Vector3(0.25,0.25,0.25)
 	mat.albedo_color=Color(1.0,1.0,1.0)
-	mat.shading_mode=BaseMaterial3D.SHADING_MODE_PER_PIXEL
-	mat.disable_receive_shadows=true
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.roughness=1.0
+	mat.metallic=0.0
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED if DEBUG_TERRAIN_UNSHADED else BaseMaterial3D.SHADING_MODE_PER_PIXEL
+	mat.disable_receive_shadows=false
 	ground.material_override=mat
 	add_child(ground)
 	var body:=StaticBody3D.new()
@@ -132,6 +141,40 @@ func _build_chunk(ox:float,oz:float) -> void:
 	cs.shape=mesh.create_trimesh_shape()
 	body.add_child(cs)
 	add_child(body)
+
+func _diagnose_terrain_cover() -> void:
+	print("[TERRAIN DEBUG] DEBUG_TERRAIN_UNSHADED=", DEBUG_TERRAIN_UNSHADED)
+	print("[TERRAIN DEBUG] Planicie: material StandardMaterial3D triplanar com grama procedural.")
+	print("[TERRAIN DEBUG] Normais calculadas por gradiente; planicie deve ter Vector3.UP.")
+	var found_cover := false
+	var root := get_parent()
+	if root:
+		for node in root.get_children():
+			if node == self:
+				continue
+			if node is MeshInstance3D and node.global_position.y >= -0.5 and node.global_position.y <= 0.5:
+				print("[TERRAIN DEBUG] Outra MeshInstance3D vizinha: ", node.name, " pos=", node.global_position)
+				found_cover = true
+			if node is Node3D and node.name.to_lower().contains("plane"):
+				print("[TERRAIN DEBUG] Possivel plano cobrindo area: ", node.name)
+				found_cover = true
+	print("[TERRAIN DEBUG] Outra malha/plano detectado na faixa de altura da planicie: ", found_cover)
+
+func _adjust_directional_light_bias() -> void:
+	var root := get_parent()
+	if root:
+		for light in _find_directional_lights(root):
+			light.shadow_bias = maxf(light.shadow_bias, 0.08)
+			light.shadow_normal_bias = maxf(light.shadow_normal_bias, 1.0)
+			print("[TERRAIN DEBUG] DirectionalLight3D ", light.name, " bias=", light.shadow_bias, " normal_bias=", light.shadow_normal_bias)
+
+func _find_directional_lights(node: Node) -> Array:
+	var found: Array = []
+	if node is DirectionalLight3D:
+		found.append(node)
+	for child in node.get_children():
+		found.append_array(_find_directional_lights(child))
+	return found
 
 func _build_water_chunk(ox:float,oz:float) -> void:
 	var st:=SurfaceTool.new()

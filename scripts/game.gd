@@ -1046,6 +1046,48 @@ func _snap_player_to_terrain() -> void:
 		camera.look_at(player.global_position + Vector3(0.0, 1.2, 0.0))
 
 func _build_player() -> void:
+	var model_scene := load("res://assets/characters/Superhero_Male_FullBody.gltf") as PackedScene
+	if model_scene == null:
+		print("FALLBACK ANTIGO")
+		_build_player_fallback()
+		return
+	var model_instance := model_scene.instantiate() as Node3D
+	if model_instance == null:
+		print("FALLBACK ANTIGO")
+		_build_player_fallback()
+		return
+	# Instancia explicitamente o protagonista GLTF; nenhum modelo procedural e criado nesse caminho.
+	player = CharacterBody3D.new()
+	player.position = Vector3(-4.0, _terrain_height(-4.0, -42.0) + 0.12, -42.0)
+	add_child(player)
+	var body := CollisionShape3D.new()
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = 0.34
+	capsule.height = 1.78
+	body.shape = capsule
+	body.position.y = 0.90
+	player.add_child(body)
+	player.floor_snap_length = 0.55
+	player.floor_max_angle = deg_to_rad(56.0)
+	player.safe_margin = 0.04
+	player_model = Node3D.new()
+	player_model.rotation.y = PI
+	player_model.add_child(model_instance)
+	player.add_child(player_model)
+	print("MODELO NOVO CARREGADO")
+	camera = Camera3D.new()
+	camera.current = true
+	camera.fov = 62
+	camera.near = 0.18
+	camera.far = 140.0
+	add_child(camera)
+	var terrain_for_camera := get_node_or_null("Terrain3D")
+	if terrain_for_camera and terrain_for_camera.has_method("set_camera"):
+		terrain_for_camera.call("set_camera", camera)
+	camera.global_position = Vector3(0.0, player.global_position.y + 2.7, 10.8)
+	camera.look_at(player.global_position + Vector3(0.0, 1.15, 0.0))
+
+func _build_player_fallback() -> void:
 	player = CharacterBody3D.new()
 	player.position = Vector3(-4.0, _terrain_height(-4.0, -42.0) + 0.12, -42.0) # Planície inicial segura.
 	add_child(player)

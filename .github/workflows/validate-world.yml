@@ -63,6 +63,17 @@ jobs:
           git commit -m "Record imported UAL1 animation names"
           git push
 
+      - name: Assert protagonist GLTF loads
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$GODOT" --headless --path "$GITHUB_WORKSPACE" --script scripts/protagonist_model_check.gd 2>&1 | tee "$RUNNER_TEMP/protagonist-check.log"
+          if grep -F "FALLBACK ANTIGO" "$RUNNER_TEMP/protagonist-check.log"; then
+            echo "Legacy fallback diagnostic detected."
+            exit 1
+          fi
+          grep -F "MODELO NOVO CARREGADO" "$RUNNER_TEMP/protagonist-check.log"
+
       - name: Launch world and assert protagonist model
         shell: bash
         run: |

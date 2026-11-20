@@ -1085,6 +1085,7 @@ func _disable_scene_shadows(node: Node) -> void:
 
 func _register_foliage_sway(_foliage: Node3D, _seed: int, _strength: float) -> void:
 	# Vegetação estática no Android reduz custo de CPU por frame.
+	pass
 
 func _add_plant(pos: Vector3, seed: int) -> void:
 	var plant_scene := _get_nature_scene(["Fern_1", "Bush_Common", "Clover_1", "Flower_3_Group", "Bush001", "Bush002", "Reed001", "Reed002"], seed)

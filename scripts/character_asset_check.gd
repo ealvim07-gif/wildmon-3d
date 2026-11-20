@@ -66,7 +66,7 @@ func _inspect_nodes(node: Node, asset_name: String) -> void:
 		report += "\n[" + asset_name + "] Skeleton3D: " + str(node.get_path()) + "\n"
 		print("SKELETON ", asset_name, " ", node.get_path(), " bone_count=", node.get_bone_count())
 		for bone_index in range(node.get_bone_count()):
-			var bone_name := node.get_bone_name(bone_index)
+			var bone_name: String = str(node.get_bone_name(bone_index))
 			report += "BONE " + str(bone_index) + ": " + bone_name + "\n"
 			print("BONE ", asset_name, " ", bone_index, " ", bone_name)
 	for child in node.get_children():

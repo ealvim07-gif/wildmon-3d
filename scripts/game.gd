@@ -20,24 +20,26 @@ class AnalogStick extends Control:
 			queue_redraw()
 
 	func _gui_input(event: InputEvent) -> void:
+		# Converte o toque do viewport para coordenadas locais do analógico.
+		var local_event := make_input_local(event)
 		if event is InputEventScreenTouch:
 			if event.pressed and pointer_index == -1:
 				pointer_index = event.index
 				active = true
-				_update_stick(event.position)
+				_update_stick(local_event.position)
 			elif not event.pressed and event.index == pointer_index:
 				pointer_index = -1
 				_reset_stick()
 		elif event is InputEventScreenDrag and event.index == pointer_index:
-			_update_stick(event.position)
+			_update_stick(local_event.position)
 		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
 				active = true
-				_update_stick(event.position)
+				_update_stick(local_event.position)
 			else:
 				_reset_stick()
 		elif event is InputEventMouseMotion and active and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-			_update_stick(event.position)
+			_update_stick(local_event.position)
 
 	func _update_stick(pointer: Vector2) -> void:
 		var center := size * 0.5
@@ -96,8 +98,8 @@ var collection_label: Label
 var creature_in_range := false
 var look_yaw := 0.0
 var target_look_yaw := 0.0
-var look_pitch := 0.18
-var target_look_pitch := 0.18
+var look_pitch := 0.38
+var target_look_pitch := 0.38
 const CAMERA_SENSITIVITY := 0.00155
 var nature_model_cache: Dictionary = {}
 var status_label: Label
@@ -214,8 +216,9 @@ func _physics_process(delta: float) -> void:
 	var input_dir := Vector2(movement_input.x, -movement_input.y)
 	if input_dir.length() > 1.0:
 		input_dir = input_dir.normalized()
-	var forward := Vector3(sin(look_yaw), 0, cos(look_yaw))
-	var right := Vector3(forward.z, 0, -forward.x)
+	# Frente acompanha a direção para a qual a câmera olha.
+	var forward := Vector3(-sin(look_yaw), 0, -cos(look_yaw))
+	var right := Vector3(cos(look_yaw), 0, -sin(look_yaw))
 	var direction := right * input_dir.x + forward * input_dir.y
 	player.velocity.x = direction.x * MOVE_SPEED
 	player.velocity.z = direction.z * MOVE_SPEED
@@ -257,10 +260,10 @@ func _build_world() -> void:
 	env.background_energy_multiplier = 1.0
 	var sky := Sky.new()
 	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.31, 0.57, 0.88)
-	sky_mat.sky_horizon_color = Color(0.84, 0.92, 0.98)
-	sky_mat.ground_bottom_color = Color(0.28, 0.34, 0.27)
-	sky_mat.ground_horizon_color = Color(0.62, 0.70, 0.56)
+	sky_mat.sky_top_color = Color(0.22, 0.48, 0.78)
+	sky_mat.sky_horizon_color = Color(0.68, 0.82, 0.91)
+	sky_mat.ground_bottom_color = Color(0.24, 0.34, 0.29)
+	sky_mat.ground_horizon_color = Color(0.48, 0.63, 0.53)
 	sky_mat.sun_angle_max = 24.0
 	sky_mat.sun_curve = 0.18
 	sky_mat.use_debanding = true
@@ -273,8 +276,8 @@ func _build_world() -> void:
 	env.tonemap_exposure = 1.30
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.72, 0.82, 0.86)
-	env.fog_density = 0.0008
-	env.fog_sky_affect = 0.25
+	env.fog_density = 0.00018
+	env.fog_sky_affect = 0.0
 	env.adjustment_enabled = true
 	env.adjustment_saturation = 1.08
 	world_env.environment = env

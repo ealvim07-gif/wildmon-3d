@@ -26,7 +26,6 @@ func _initialize() -> void:
 		push_error("Could not instantiate imported GLB scene.")
 		quit(1)
 		return
-	var found := 0
 	_collect_animation_players(instance)
 	instance.free()
 	if found == 0:

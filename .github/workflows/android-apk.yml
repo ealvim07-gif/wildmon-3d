@@ -201,9 +201,11 @@ jobs:
           "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$APK" | tee "$RUNNER_TEMP/apk-badging.txt"
           grep -F "package: name='com.wildmon.game'" "$RUNNER_TEMP/apk-badging.txt"
           grep -F "application-label:'Wildmon 3D'" "$RUNNER_TEMP/apk-badging.txt"
-          # Confirm APK archive includes Godot's embedded project pack.
+          # Godot's Android export embeds imported resources under assets/; no standalone PCK is required.
           unzip -l "$APK" | tee "$RUNNER_TEMP/apk-contents.txt"
-          grep -E -i "\\.pck$|project\\.pck" "$RUNNER_TEMP/apk-contents.txt"
+          grep -F "assets/.godot/imported/Superhero_Male_FullBody.gltf-" "$RUNNER_TEMP/apk-contents.txt"
+          grep -F "assets/.godot/imported/T_Superhero_Male_Dark.png-" "$RUNNER_TEMP/apk-contents.txt"
+          grep -F "assets/.godot/imported/UAL1_Standard.glb-" "$RUNNER_TEMP/apk-contents.txt"
           sha256sum "$APK"
           ls -lh "$APK"
 

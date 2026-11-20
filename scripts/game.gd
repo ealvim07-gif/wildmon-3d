@@ -21,25 +21,25 @@ class AnalogStick extends Control:
 
 	func _gui_input(event: InputEvent) -> void:
 		# Converte o toque do viewport para coordenadas locais do analógico.
-		var local_event := make_input_local(event)
+		# _gui_input já entrega event.position em coordenadas locais do Control.
 		if event is InputEventScreenTouch:
 			if event.pressed and pointer_index == -1:
 				pointer_index = event.index
 				active = true
-				_update_stick(local_event.position)
+				_update_stick(event.position)
 			elif not event.pressed and event.index == pointer_index:
 				pointer_index = -1
 				_reset_stick()
 		elif event is InputEventScreenDrag and event.index == pointer_index:
-			_update_stick(local_event.position)
+			_update_stick(event.position)
 		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
 				active = true
-				_update_stick(local_event.position)
+				_update_stick(event.position)
 			else:
 				_reset_stick()
 		elif event is InputEventMouseMotion and active and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-			_update_stick(local_event.position)
+			_update_stick(event.position)
 
 	func _update_stick(pointer: Vector2) -> void:
 		var center := size * 0.5
@@ -117,6 +117,8 @@ var camera_touch_index := -1
 func _ready() -> void:
 	_build_world()
 	_build_player()
+	await get_tree().physics_frame
+	_snap_player_to_terrain()
 	_build_ui()
 	_load_collection()
 	_build_creature()
@@ -169,19 +171,12 @@ func _process(delta: float) -> void:
 	var horizontal := cos(look_pitch) * CAMERA_DISTANCE
 	var cam_offset := Vector3(sin(look_yaw) * horizontal, sin(look_pitch) * CAMERA_DISTANCE, cos(look_yaw) * horizontal)
 	var desired_camera_position := target + cam_offset
-	var camera_query := PhysicsRayQueryParameters3D.create(target, desired_camera_position)
-	camera_query.collision_mask = 1
-	camera_query.exclude = [player.get_rid()]
-	var camera_hit := get_world_3d().direct_space_state.intersect_ray(camera_query)
-	if not camera_hit.is_empty():
-		var hit_position: Vector3 = camera_hit.position
-		var safe_direction := (desired_camera_position - target).normalized()
-		desired_camera_position = hit_position - safe_direction * 0.42
-	# Mantém a câmera acima da superfície mesmo em inclinações e transições do relevo.
-	var camera_floor := _terrain_height(desired_camera_position.x, desired_camera_position.z) + 1.25
-	desired_camera_position.y = maxf(desired_camera_position.y, camera_floor)
-	camera.global_position = camera.global_position.lerp(desired_camera_position, minf(delta * 4.4, 1.0))
-	var actual_camera_floor := _terrain_height(camera.global_position.x, camera.global_position.z) + 1.1
+	# Câmera elevada: não deixa a própria encosta ficar entre a lente e o jogador.
+	# O antigo raycast colocava a câmera 42 cm para dentro da superfície atingida.
+	var camera_floor := _terrain_height(desired_camera_position.x, desired_camera_position.z) + 4.2
+	desired_camera_position.y = maxf(desired_camera_position.y + 1.8, camera_floor)
+	camera.global_position = camera.global_position.lerp(desired_camera_position, minf(delta * 6.0, 1.0))
+	var actual_camera_floor := _terrain_height(camera.global_position.x, camera.global_position.z) + 3.4
 	camera.global_position.y = maxf(camera.global_position.y, actual_camera_floor)
 	camera.look_at(target, Vector3.UP)
 	if creature and not creature_captured:
@@ -1090,6 +1085,17 @@ func _add_plant(pos: Vector3, seed: int) -> void:
 	stem.position = pos + Vector3(0, 0.24, 0)
 	stem.material_override = _mat(Color(0.20, 0.38, 0.16))
 	add_child(stem)
+
+func _snap_player_to_terrain() -> void:
+	# Posiciona o explorador pela colisão real do terreno, não por uma estimativa.
+	var origin := Vector3(player.global_position.x, 80.0, player.global_position.z)
+	var destination := Vector3(player.global_position.x, -30.0, player.global_position.z)
+	var query := PhysicsRayQueryParameters3D.create(origin, destination)
+	query.collision_mask = 1
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if not hit.is_empty():
+		player.global_position.y = hit.position.y + 0.10
+		player.velocity = Vector3.ZERO
 
 func _build_player() -> void:
 	player = CharacterBody3D.new()

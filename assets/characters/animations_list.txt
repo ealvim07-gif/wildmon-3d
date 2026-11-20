@@ -1,0 +1,47 @@
+Animations found in UAL1_Standard.glb
+Model import: OK
+Animation GLB import: OK
+
+/A_TPose
+/Crouch_Fwd
+/Crouch_Idle
+/Dance
+/Death01
+/Driving
+/Fixing_Kneeling
+/Hit_Chest
+/Hit_Head
+/Idle
+/Idle_Talking
+/Idle_Torch
+/Interact
+/Jog_Fwd
+/Jump
+/Jump_Land
+/Jump_Start
+/PickUp_Table
+/Pistol_Aim_Down
+/Pistol_Aim_Neutral
+/Pistol_Aim_Up
+/Pistol_Idle
+/Pistol_Reload
+/Pistol_Shoot
+/Punch_Cross
+/Punch_Jab
+/Push
+/Roll
+/Sitting_Enter
+/Sitting_Exit
+/Sitting_Idle
+/Sitting_Talking
+/Spell_Simple_Enter
+/Spell_Simple_Exit
+/Spell_Simple_Idle
+/Spell_Simple_Shoot
+/Sprint
+/Swim_Fwd
+/Swim_Idle
+/Sword_Attack
+/Sword_Idle
+/Walk
+/Walk_Formal

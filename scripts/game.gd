@@ -1243,11 +1243,7 @@ func _build_pedralume() -> void:
 	_add_prism_part(creature, Vector3(-0.02, 0.31, -0.43), Vector3(0.28, 0.24, 0.24), stone_light)
 
 func _build_start_menu() -> void:
-	# Tela inicial de beta: HUD fica oculto até o usuário iniciar.
-	movement_stick.visible = false
-	capture_button.visible = false
-	collection_label.visible = false
-	variant_label.visible = false
+	# Tela inicial de beta; controles/HUD ainda não foram criados neste momento.
 	var layer := CanvasLayer.new()
 	layer.name = "StartMenuLayer"
 	add_child(layer)

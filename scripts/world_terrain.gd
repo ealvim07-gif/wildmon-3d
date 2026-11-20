@@ -1,37 +1,64 @@
 extends Node3D
-# Terrain chunks simples para Android.
+# Terreno por chunks, com textura tiling e colisao triangulada para Android.
 const CHUNK_SIZE := 32.0
 const CHUNKS := 8
-const CELLS := 16
+const CELLS := 24
 const FLAT_RADIUS := 80.0
-const WATER_LEVEL := -1.8
+const WATER_LEVEL := -1.25
 var height_noise := FastNoiseLite.new()
 var lake_noise := FastNoiseLite.new()
+var grass_texture: ImageTexture
+
 func _ready() -> void:
 	height_noise.seed = 82471
-	height_noise.frequency = 0.012
+	height_noise.frequency = 0.009
 	height_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
 	height_noise.fractal_octaves = 3
-	height_noise.fractal_gain = 0.48
+	height_noise.fractal_gain = 0.45
 	height_noise.fractal_lacunarity = 2.0
 	lake_noise.seed = 823
-	lake_noise.frequency = 0.025
+	lake_noise.frequency = 0.012
 	lake_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	grass_texture = ImageTexture.create_from_image(_make_grass_texture())
 	_build_chunks()
+
 func height_at(x: float, z: float) -> float:
-	if Vector2(x,z).length() <= FLAT_RADIUS:
+	var p := Vector2(x,z)
+	if p.length() <= FLAT_RADIUS:
 		return 0.0
-	var h := height_noise.get_noise_2d(x,z)*9.0
-	if lake_noise.get_noise_2d(x,z)>0.48:
-		h-=4.0
-	return h
+	# Fade suave na borda da planicie, para evitar degrau.
+	var fade := smoothstep(FLAT_RADIUS, FLAT_RADIUS + 22.0, p.length())
+	var hills := height_noise.get_noise_2d(x,z) * 5.0
+	# Bacias suaves e deterministicas, afastadas do spawn.
+	var basin_mask := smoothstep(0.50, 0.68, lake_noise.get_noise_2d(x,z))
+	var basin := -3.2 * basin_mask
+	return (hills + basin) * fade
+
+func _make_grass_texture() -> Image:
+	var image := Image.create(256,256,false,Image.FORMAT_RGBA8)
+	var broad:=FastNoiseLite.new(); broad.seed=418; broad.frequency=0.035
+	var detail:=FastNoiseLite.new(); detail.seed=733; detail.frequency=0.19
+	var grain:=FastNoiseLite.new(); grain.seed=991; grain.frequency=0.62
+	for y in range(256):
+		for x in range(256):
+			var n1:=broad.get_noise_2d(float(x),float(y))
+			var n2:=detail.get_noise_2d(float(x),float(y))
+			var n3:=grain.get_noise_2d(float(x),float(y))
+			var fleck:=sin(float(x)*1.7+n2*8.0)*cos(float(y)*1.3+n3*7.0)*0.035
+			var value:=clampf(0.5+n1*0.25+n2*0.18+n3*0.09+fleck,0.0,1.0)
+			var color:=Color(0.105,0.23,0.075).lerp(Color(0.34,0.47,0.20),value)
+			image.set_pixel(x,y,Color(color.r,color.g,color.b,1.0))
+	image.generate_mipmaps()
+	return image
+
 func _build_chunks() -> void:
 	for cx in range(CHUNKS):
 		for cz in range(CHUNKS):
-			var ox := (float(cx)-CHUNKS*0.5)*CHUNK_SIZE
-			var oz := (float(cz)-CHUNKS*0.5)*CHUNK_SIZE
+			var ox:float=(float(cx)-CHUNKS*0.5)*CHUNK_SIZE
+			var oz:float=(float(cz)-CHUNKS*0.5)*CHUNK_SIZE
 			_build_chunk(ox,oz)
 			_build_water_chunk(ox,oz)
+
 func _build_chunk(ox:float,oz:float) -> void:
 	var st:=SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -45,15 +72,18 @@ func _build_chunk(ox:float,oz:float) -> void:
 			var b:=Vector3(x1,height_at(x1,z0),z0)
 			var c:=Vector3(x0,height_at(x0,z1),z1)
 			var d:=Vector3(x1,height_at(x1,z1),z1)
-			st.add_vertex(a);st.add_vertex(c);st.add_vertex(b)
-			st.add_vertex(b);st.add_vertex(c);st.add_vertex(d)
+			# Ordem consistente: triangulos com faces voltadas para cima.
+			st.add_vertex(a); st.add_vertex(c); st.add_vertex(b)
+			st.add_vertex(b); st.add_vertex(c); st.add_vertex(d)
 	st.generate_normals()
 	var mesh:=st.commit()
 	var ground:=MeshInstance3D.new()
 	ground.mesh=mesh
 	var mat:=StandardMaterial3D.new()
-	mat.albedo_color=Color(0.34,0.48,0.26)
+	mat.albedo_texture=grass_texture
 	mat.roughness=1.0
+	mat.texture_filter=BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	mat.uv1_scale=Vector3(8.0,8.0,1.0)
 	ground.material_override=mat
 	add_child(ground)
 	var body:=StaticBody3D.new()
@@ -61,6 +91,7 @@ func _build_chunk(ox:float,oz:float) -> void:
 	cs.shape=mesh.create_trimesh_shape()
 	body.add_child(cs)
 	add_child(body)
+
 func _build_water_chunk(ox:float,oz:float) -> void:
 	var st:=SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -72,8 +103,9 @@ func _build_water_chunk(ox:float,oz:float) -> void:
 			var x1:=x0+CHUNK_SIZE/CELLS
 			var z1:=z0+CHUNK_SIZE/CELLS
 			var mid:=Vector2((x0+x1)*0.5,(z0+z1)*0.5)
-			if mid.length()<=FLAT_RADIUS or lake_noise.get_noise_2d(mid.x,mid.y)<=0.48 or height_at(mid.x,mid.y)>=WATER_LEVEL:
+			if mid.length()<=FLAT_RADIUS+12.0 or height_at(mid.x,mid.y)>=WATER_LEVEL-0.08:
 				continue
+			# Face superior, plano de agua em celulas de bacia abaixo do nivel.
 			st.add_vertex(Vector3(x0,WATER_LEVEL,z0))
 			st.add_vertex(Vector3(x0,WATER_LEVEL,z1))
 			st.add_vertex(Vector3(x1,WATER_LEVEL,z0))
@@ -81,7 +113,9 @@ func _build_water_chunk(ox:float,oz:float) -> void:
 			st.add_vertex(Vector3(x0,WATER_LEVEL,z1))
 			st.add_vertex(Vector3(x1,WATER_LEVEL,z1))
 			has_water=true
-	if not has_water:return
+	if not has_water:
+		return
+	st.generate_normals()
 	var water:=MeshInstance3D.new()
 	water.mesh=st.commit()
 	var sm:=ShaderMaterial.new()

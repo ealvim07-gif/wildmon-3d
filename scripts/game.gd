@@ -86,6 +86,11 @@ var player: CharacterBody3D
 var player_model: Node3D
 var protagonist_animation_player: AnimationPlayer
 var current_protagonist_animation := ""
+var protagonist_tracks_ok := 0
+var protagonist_tracks_total := 0
+var protagonist_ignored_tracks := 0
+var protagonist_first_track := ""
+var protagonist_diagnostic_label: Label
 var protagonist_model_status := "MODELO: NÃO TESTADO"
 var player_arm_parts: Array[Node3D] = []
 var player_leg_parts: Array[Node3D] = []
@@ -1127,50 +1132,79 @@ func _setup_protagonist_animations(model_instance: Node3D) -> void:
 	protagonist_animation_player = AnimationPlayer.new()
 	protagonist_animation_player.name = "ProtagonistAnimationPlayer"
 	player_model.add_child(protagonist_animation_player)
+	# As animações são copiadas com o root_node explicitamente relativo ao AnimationPlayer.
+	protagonist_animation_player.root_node = NodePath(".")
 	var target_skeleton_path := protagonist_animation_player.get_path_to(skeleton)
 	var library := AnimationLibrary.new()
+	var ignored := 0
+	var ok_tracks := 0
+	var total_tracks := 0
+	var first_converted := ""
 	for library_name in source_player.get_animation_library_list():
 		var source_library: AnimationLibrary = source_player.get_animation_library(library_name)
 		for animation_name in source_library.get_animation_list():
+			var animation_key := str(animation_name)
+			if not ["Idle", "Walk", "Jog_Fwd", "Sprint"].has(animation_key):
+				continue
 			var source_animation: Animation = source_library.get_animation(animation_name)
 			var retargeted: Animation = source_animation.duplicate(true)
 			for track_index in range(retargeted.get_track_count()):
 				var original_path: NodePath = retargeted.track_get_path(track_index)
-				var subnames: Array[String] = []
+				total_tracks += 1
+				# A origem do caminho é irrelevante: aproveita somente o nome após ':'.
+				var bone_name := ""
 				for subname_index in range(original_path.get_subname_count()):
-					subnames.append(str(original_path.get_subname(subname_index)))
-				if subnames.size() > 0 and skeleton.find_bone(subnames[0]) >= 0:
-					var remapped_path := str(target_skeleton_path)
-					for subname in subnames:
-						remapped_path += ":" + subname
-					retargeted.track_set_path(track_index, NodePath(remapped_path))
+					var subname := str(original_path.get_subname(subname_index))
+					if subname_index == 0:
+						bone_name = subname
+				# Descartar deslocamento do osso raiz para não aplicar root motion.
+				var track_type := retargeted.track_get_type(track_index)
+				var track_property := str(original_path)
+				var is_root_position := bone_name.to_lower() in ["root", "armature", "hips"] and track_type == Animation.TYPE_POSITION_3D
+				if is_root_position or skeleton.find_bone(bone_name) < 0:
+					retargeted.remove_track(track_index)
+					ignored += 1
+					continue
+				var converted_path := str(target_skeleton_path) + ":" + bone_name
+				retargeted.track_set_path(track_index, NodePath(converted_path))
+				ok_tracks += 1
+				if first_converted == "":
+					first_converted = converted_path
 			retargeted.loop_mode = Animation.LOOP_LINEAR
-			var animation_key := str(animation_name)
-			if animation_key in ["Idle", "Walk", "Jog_Fwd", "Sprint"]:
-				library.add_animation(animation_key, retargeted)
+			library.add_animation(animation_key, retargeted)
 	if library.get_animation_list().size() > 0:
 		protagonist_animation_player.add_animation_library("", library)
+		protagonist_tracks_ok = ok_tracks
+		protagonist_tracks_total = total_tracks
+		protagonist_ignored_tracks = ignored
+		protagonist_first_track = first_converted
 		protagonist_animation_player.play("Idle")
 		current_protagonist_animation = "Idle"
-		print("PROTAGONIST ANIMATIONS CONNECTED: ", library.get_animation_list())
+		print("ANIMATION TRACKS OK=", ok_tracks, "/", total_tracks, " ignored=", ignored, " first=", first_converted)
 	else:
 		push_warning("UAL1 library did not contain Idle/Walk/Jog_Fwd/Sprint.")
 	source_instance.free()
+	_update_protagonist_diagnostic()
 
 func _update_protagonist_animation(speed: float, _delta: float) -> void:
 	if protagonist_animation_player == null:
 		return
 	var animation_name := "Idle"
 	if speed > 0.15:
-		if speed >= MOVE_SPEED * 0.82:
+		if speed >= MOVE_SPEED * 0.98:
 			animation_name = "Sprint"
-		elif speed >= MOVE_SPEED * 0.46:
+		elif speed >= MOVE_SPEED * 0.50:
 			animation_name = "Jog_Fwd"
 		else:
 			animation_name = "Walk"
 	if animation_name != current_protagonist_animation:
 		protagonist_animation_player.play(animation_name, 0.22)
 		current_protagonist_animation = animation_name
+		_update_protagonist_diagnostic()
+
+func _update_protagonist_diagnostic() -> void:
+	if protagonist_diagnostic_label:
+		protagonist_diagnostic_label.text = "MODELO: NOVO | ANIM: " + current_protagonist_animation + " | TRACKS OK: " + str(protagonist_tracks_ok) + "/" + str(protagonist_tracks_total) + " | TRACK: " + protagonist_first_track
 
 func _build_player_fallback() -> void:
 	player = CharacterBody3D.new()
@@ -1456,6 +1490,7 @@ func _build_ui() -> void:
 	diagnostic_layer.name = "ProtagonistDiagnostic"
 	add_child(diagnostic_layer)
 	var diagnostic_label := Label.new()
+	protagonist_diagnostic_label = diagnostic_label
 	diagnostic_label.text = protagonist_model_status
 	diagnostic_label.anchor_left = 0.0
 	diagnostic_label.anchor_top = 0.0

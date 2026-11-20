@@ -54,17 +54,17 @@ func _initialize() -> void:
 func _inspect_nodes(node: Node, asset_name: String) -> void:
 	if node is AnimationPlayer:
 		report += "\n[" + asset_name + "] AnimationPlayer: " + str(node.name) + "\n"
-		print("PLAYER ", asset_name, " ", node.get_path())
+		print("PLAYER ", asset_name, " ", str(node.name))
 		for library_name in node.get_animation_library_list():
 			var library: AnimationLibrary = node.get_animation_library(library_name)
 			for anim_name in library.get_animation_list():
 				var full_name := str(library_name) + "/" + str(anim_name)
 				animation_names.append(full_name)
 				report += "ANIMATION: " + full_name + "\n"
-				print("ANIMATION: ", asset_name, " ", full_name)
+				print("ANIMATION: ", asset_name, " ", full_name)\n\t\t\t\tvar animation: Animation = library.get_animation(anim_name)\n\t\t\t\tfor track_index in range(animation.get_track_count()):\n\t\t\t\t\tvar track_path := str(animation.track_get_path(track_index))\n\t\t\t\t\tvar track_type := str(animation.track_get_type(track_index))\n\t\t\t\t\treport += "TRACK: " + full_name + " | " + track_path + " | " + track_type + "\\n"\n\t\t\t\t\tprint("TRACK: ", asset_name, " ", full_name, " | ", track_path, " | ", track_type)
 	if node is Skeleton3D:
-		report += "\n[" + asset_name + "] Skeleton3D: " + str(node.get_path()) + "\n"
-		print("SKELETON ", asset_name, " ", node.get_path(), " bone_count=", node.get_bone_count())
+		report += "\n[" + asset_name + "] Skeleton3D: " + str(node.name) + "\n"
+		print("SKELETON ", asset_name, " ", str(node.name), " bone_count=", node.get_bone_count())
 		for bone_index in range(node.get_bone_count()):
 			var bone_name: String = str(node.get_bone_name(bone_index))
 			report += "BONE " + str(bone_index) + ": " + bone_name + "\n"

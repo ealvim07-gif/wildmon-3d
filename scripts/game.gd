@@ -781,7 +781,9 @@ func _build_terrain() -> void:
 	terrain.set("region_size", 256)
 	terrain.set("vertex_spacing", 1.0)
 	terrain.position = Vector3(-128.0, 0.0, -128.0)
-	terrain.set("data_directory", "user://wildmon_terrain")
+	var terrain_data_path := "user://wildmon_terrain"
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(terrain_data_path))
+	terrain.set("data_directory", terrain_data_path)
 	add_child(terrain)
 
 	var data = terrain.get("data")

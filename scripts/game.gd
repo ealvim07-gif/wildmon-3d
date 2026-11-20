@@ -1148,7 +1148,7 @@ func _setup_protagonist_animations(model_instance: Node3D) -> void:
 				continue
 			var source_animation: Animation = source_library.get_animation(animation_name)
 			var retargeted: Animation = source_animation.duplicate(true)
-			for track_index in range(retargeted.get_track_count()):
+			for track_index in range(retargeted.get_track_count() - 1, -1, -1):
 				var original_path: NodePath = retargeted.track_get_path(track_index)
 				total_tracks += 1
 				# A origem do caminho é irrelevante: aproveita somente o nome após ':'.

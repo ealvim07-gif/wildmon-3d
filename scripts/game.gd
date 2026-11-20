@@ -84,6 +84,8 @@ const CAMERA_MIN_CLEARANCE := 2.2
 
 var player: CharacterBody3D
 var player_model: Node3D
+var protagonist_animation_player: AnimationPlayer
+var current_protagonist_animation := ""
 var protagonist_model_status := "MODELO: NÃO TESTADO"
 var player_arm_parts: Array[Node3D] = []
 var player_leg_parts: Array[Node3D] = []
@@ -257,17 +259,7 @@ func _physics_process(delta: float) -> void:
 	if player.global_position.y < floor_height - 0.85 or player.global_position.y < -2.0:
 		player.global_position = Vector3(player.global_position.x, floor_height + 0.08, player.global_position.z)
 		player.velocity = Vector3.ZERO
-	if player_model:
-		var moving := input_dir.length() > 0.12
-		var gait := sin(Time.get_ticks_msec() * 0.012) if moving else 0.0
-		player_model.position.y = absf(gait) * 0.045
-		player_model.rotation.z = lerpf(player_model.rotation.z, gait * 0.025, min(delta * 8.0, 1.0))
-		for arm_index in range(player_arm_parts.size()):
-			var arm_target := gait * 0.42 * (1.0 if arm_index == 0 else -1.0) if moving else 0.0
-			player_arm_parts[arm_index].rotation.x = lerpf(player_arm_parts[arm_index].rotation.x, arm_target, minf(delta * 9.0, 1.0))
-		for leg_index in range(player_leg_parts.size()):
-			var leg_target := gait * 0.58 * (1.0 if leg_index == 0 else -1.0) if moving else 0.0
-			player_leg_parts[leg_index].rotation.x = lerpf(player_leg_parts[leg_index].rotation.x, leg_target, minf(delta * 9.0, 1.0))
+	_update_protagonist_animation(horizontal_velocity.length(), delta)
 	if direction.length() > 0.1:
 		player.rotation.y = lerp_angle(player.rotation.y, atan2(direction.x, direction.z) + PI, 1.0 - exp(-TURN_SPEED * delta))
 
@@ -1085,6 +1077,7 @@ func _build_player() -> void:
 	player_model.rotation.y = PI
 	player_model.add_child(model_instance)
 	player.add_child(player_model)
+	_setup_protagonist_animations(model_instance)
 	print("MODELO NOVO CARREGADO")
 	camera = Camera3D.new()
 	camera.current = true
@@ -1097,6 +1090,87 @@ func _build_player() -> void:
 		terrain_for_camera.call("set_camera", camera)
 	camera.global_position = Vector3(0.0, player.global_position.y + 2.7, 10.8)
 	camera.look_at(player.global_position + Vector3(0.0, 1.15, 0.0))
+
+func _find_skeleton(node: Node) -> Skeleton3D:
+	if node is Skeleton3D:
+		return node as Skeleton3D
+	for child in node.get_children():
+		var found := _find_skeleton(child)
+		if found != null:
+			return found
+	return null
+
+func _find_animation_player(node: Node) -> AnimationPlayer:
+	if node is AnimationPlayer:
+		return node as AnimationPlayer
+	for child in node.get_children():
+		var found := _find_animation_player(child)
+		if found != null:
+			return found
+	return null
+
+func _setup_protagonist_animations(model_instance: Node3D) -> void:
+	var skeleton := _find_skeleton(model_instance)
+	if skeleton == null:
+		push_warning("Protagonist Skeleton3D not found; animations cannot be retargeted.")
+		return
+	var source_scene := load("res://assets/characters/UAL1_Standard.glb") as PackedScene
+	if source_scene == null:
+		push_warning("UAL1 animation asset failed to load.")
+		return
+	var source_instance := source_scene.instantiate()
+	var source_player := _find_animation_player(source_instance)
+	if source_player == null:
+		source_instance.free()
+		push_warning("AnimationPlayer not found in UAL1 scene.")
+		return
+	protagonist_animation_player = AnimationPlayer.new()
+	protagonist_animation_player.name = "ProtagonistAnimationPlayer"
+	player_model.add_child(protagonist_animation_player)
+	var target_skeleton_path := protagonist_animation_player.get_path_to(skeleton)
+	var library := AnimationLibrary.new()
+	for library_name in source_player.get_animation_library_list():
+		var source_library: AnimationLibrary = source_player.get_animation_library(library_name)
+		for animation_name in source_library.get_animation_list():
+			var source_animation: Animation = source_library.get_animation(animation_name)
+			var retargeted: Animation = source_animation.duplicate(true)
+			for track_index in range(retargeted.get_track_count()):
+				var original_path: NodePath = retargeted.track_get_path(track_index)
+				var subnames: Array[String] = []
+				for subname_index in range(original_path.get_subname_count()):
+					subnames.append(str(original_path.get_subname(subname_index)))
+				if subnames.size() > 0 and skeleton.find_bone(subnames[0]) >= 0:
+					var remapped_path := str(target_skeleton_path)
+					for subname in subnames:
+						remapped_path += ":" + subname
+					retargeted.track_set_path(track_index, NodePath(remapped_path))
+			retargeted.loop_mode = Animation.LOOP_LINEAR
+			var animation_key := str(animation_name)
+			if animation_key in ["Idle", "Walk", "Jog_Fwd", "Sprint"]:
+				library.add_animation(animation_key, retargeted)
+	if library.get_animation_list().size() > 0:
+		protagonist_animation_player.add_animation_library("", library)
+		protagonist_animation_player.play("Idle")
+		current_protagonist_animation = "Idle"
+		print("PROTAGONIST ANIMATIONS CONNECTED: ", library.get_animation_list())
+	else:
+		push_warning("UAL1 library did not contain Idle/Walk/Jog_Fwd/Sprint.")
+	source_instance.free()
+
+func _update_protagonist_animation(speed: float, _delta: float) -> void:
+	if protagonist_animation_player == null:
+		return
+	var animation_name := "Idle"
+	if speed > 0.15:
+		if speed >= MOVE_SPEED * 0.82:
+			animation_name = "Sprint"
+		elif speed >= MOVE_SPEED * 0.46:
+			animation_name = "Jog_Fwd"
+		else:
+			animation_name = "Walk"
+	if animation_name != current_protagonist_animation:
+		protagonist_animation_player.play(animation_name, 0.22)
+		current_protagonist_animation = animation_name
 
 func _build_player_fallback() -> void:
 	player = CharacterBody3D.new()
@@ -1388,9 +1462,9 @@ func _build_ui() -> void:
 	diagnostic_label.anchor_right = 0.0
 	diagnostic_label.anchor_bottom = 0.0
 	diagnostic_label.offset_left = 12.0
-	diagnostic_label.offset_top = 8.0
+	diagnostic_label.offset_top = 160.0
 	diagnostic_label.offset_right = 320.0
-	diagnostic_label.offset_bottom = 36.0
+	diagnostic_label.offset_bottom = 188.0
 	diagnostic_label.add_theme_font_size_override("font_size", 16)
 	diagnostic_layer.add_child(diagnostic_label)
 	var layer := CanvasLayer.new()

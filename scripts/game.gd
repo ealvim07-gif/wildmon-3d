@@ -1346,6 +1346,86 @@ func _build_pedralume() -> void:
 	_add_prism_part(creature, Vector3(0.43, 0.10, -0.02), Vector3(0.18, 0.38, 0.50), Color(0.22, 0.30, 0.29))
 	_add_prism_part(creature, Vector3(-0.02, 0.31, -0.43), Vector3(0.28, 0.24, 0.24), stone_light)
 
+func _build_start_menu() -> void:
+	# Tela inicial de beta: HUD fica oculto até o usuário iniciar.
+	movement_stick.visible = false
+	capture_button.visible = false
+	collection_label.visible = false
+	variant_label.visible = false
+	var layer := CanvasLayer.new()
+	layer.name = "StartMenuLayer"
+	add_child(layer)
+	start_menu = Control.new()
+	start_menu.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(start_menu)
+	var shade := ColorRect.new()
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	shade.color = Color(0.025, 0.06, 0.07, 0.72)
+	start_menu.add_child(shade)
+	var panel := PanelContainer.new()
+	panel.anchor_left = 0.18
+	panel.anchor_right = 0.82
+	panel.anchor_top = 0.28
+	panel.anchor_bottom = 0.72
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.08, 0.15, 0.14, 0.94)
+	style.set_corner_radius_all(24)
+	style.border_color = Color(0.58, 0.75, 0.60, 0.8)
+	style.set_border_width_all(2)
+	panel.add_theme_stylebox_override("panel", style)
+	start_menu.add_child(panel)
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 18)
+	panel.add_child(box)
+	var heading := Label.new()
+	heading.text = "WILDMON 3D"
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	heading.add_theme_font_size_override("font_size", 32)
+	box.add_child(heading)
+	var subtitle := Label.new()
+	subtitle.text = "BETA DE EXPLORAÇÃO"
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.add_theme_font_size_override("font_size", 16)
+	box.add_child(subtitle)
+	var start_button := Button.new()
+	start_button.text = "INICIAR"
+	start_button.custom_minimum_size = Vector2(0, 76)
+	start_button.add_theme_font_size_override("font_size", 25)
+	start_button.pressed.connect(_start_game)
+	box.add_child(start_button)
+	var footer := Label.new()
+	footer.text = "Planície de treinamento • Ambiente e movimentação"
+	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	footer.add_theme_font_size_override("font_size", 13)
+	box.add_child(footer)
+
+func _start_game() -> void:
+	started = true
+	if start_menu:
+		start_menu.queue_free()
+	movement_stick.visible = true
+	capture_button.visible = false
+	collection_label.visible = false
+	variant_label.visible = false
+	_update_status("Explore a planície inicial.")
+
+func _update_day_cycle() -> void:
+	if sun_node == null:
+		return
+	# Sol alto no início, com ciclo lento para uma sessão de jogo.
+	var angle := day_time * TAU
+	sun_node.rotation_degrees = Vector3(-25.0 - sin(angle) * 48.0, -32.0, 0.0)
+	sun_node.light_energy = 0.35 + maxf(0.0, sin(angle)) * 1.05
+	if day_time > 0.22 and day_time < 0.78:
+		sun_node.light_color = Color(1.0, 0.97, 0.88)
+	else:
+		sun_node.light_color = Color(0.70, 0.78, 0.94)
+	# Brisa e céu variam lentamente sem processamento pesado de partículas.
+	if wind_phase > 18.0:
+		wind_phase = 0.0
+
+
 func _build_ui() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)

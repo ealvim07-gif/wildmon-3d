@@ -276,109 +276,57 @@ func _physics_process(delta: float) -> void:
 		player.rotation.y = lerp_angle(player.rotation.y, atan2(direction.x, direction.z) + PI, 1.0 - exp(-TURN_SPEED * delta))
 
 func _build_world() -> void:
+	# Etapa 1: mundo simplificado e confiável para Android.
 	var world_env := WorldEnvironment.new()
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
-	env.background_energy_multiplier = 1.0
 	var sky := Sky.new()
 	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.08, 0.30, 0.78)
-	sky_mat.sky_horizon_color = Color(0.58, 0.78, 0.96)
-	sky_mat.ground_bottom_color = Color(0.24, 0.34, 0.29)
-	sky_mat.ground_horizon_color = Color(0.48, 0.63, 0.53)
-	sky_mat.sun_angle_max = 24.0
-	sky_mat.sun_curve = 0.18
-	sky_mat.use_debanding = true
+	sky_mat.sky_top_color = Color(0.18, 0.42, 0.78)
+	sky_mat.sky_horizon_color = Color(0.68, 0.82, 0.96)
+	sky_mat.ground_bottom_color = Color(0.22, 0.30, 0.22)
+	sky_mat.ground_horizon_color = Color(0.48, 0.60, 0.42)
 	sky.sky_material = sky_mat
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_color = Color(0.72, 0.82, 0.96)
-	env.ambient_light_energy = 0.95
+	env.ambient_light_energy = 0.7
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.0
 	env.fog_enabled = false
-	env.fog_light_color = Color(0.72, 0.82, 0.86)
-	env.fog_density = 0.00018
-	env.fog_sky_affect = 0.0
-	env.adjustment_enabled = true
-	env.adjustment_saturation = 1.08
 	world_env.environment = env
 	add_child(world_env)
 
 	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-42, -32, 0)
-	sun.light_energy = 1.35
-	sun.light_color = Color(1.0, 0.97, 0.90)
+	sun.name = "Sun"
+	sun.rotation_degrees = Vector3(-48.0, -30.0, 0.0)
+	sun.light_energy = 1.0
 	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 32.0
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	sun.directional_shadow_max_distance = 24.0
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
 	sun_node = sun
 	add_child(sun)
 
-	_build_terrain()
-	# Piso de segurança muito abaixo do mapa: só impede queda infinita caso
-	# algum objeto saia dos limites, sem aparecer na câmera durante o jogo.
+	# Plano único de 400 x 400 m: sem Terrain3D, relevo, patches ou triângulos extras.
+	var ground := MeshInstance3D.new()
+	ground.name = "StableGrassPlane"
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(400.0, 400.0)
+	ground.mesh = plane
+	var grass := StandardMaterial3D.new()
+	grass.albedo_color = Color(0.30, 0.48, 0.22)
+	grass.roughness = 1.0
+	grass.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	ground.material_override = grass
+	add_child(ground)
+
 	var ground_body := StaticBody3D.new()
-	ground_body.position.y = -14.0
-	add_child(ground_body)
+	ground_body.name = "GroundCollision"
 	var ground_shape := CollisionShape3D.new()
-	var ground_box := BoxShape3D.new()
-	ground_box.size = Vector3(148, 1.0, 148)
-	ground_shape.shape = ground_box
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(400.0, 0.2, 400.0)
+	ground_shape.shape = shape
+	ground_shape.position.y = -0.1
 	ground_body.add_child(ground_shape)
-
-	_build_trail()
-	_build_distant_ridges()
-	_build_waterhole()
-
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 81027
-	# Bosques em manchas irregulares, com árvores isoladas entre os grupos.
-	var grove_centers := [Vector2(-31.0, -29.0), Vector2(31.0, -29.0), Vector2(-34.0, 34.0), Vector2(34.0, 34.0)]
-	for i in range(48):
-		var px: float
-		var pz: float
-		if i % 7 == 0:
-			px = rng.randf_range(-65.0, 65.0)
-			pz = rng.randf_range(-66.0, 66.0)
-		else:
-			var center: Vector2 = grove_centers[i % grove_centers.size()]
-			px = center.x + rng.randf_range(-14.0, 14.0)
-			pz = center.y + rng.randf_range(-13.0, 13.0)
-		if absf(px) < 9.0 and pz < 11.0 and pz > -31.0:
-			continue
-		if Vector2(px + 4.0, pz + 42.0).length() < 21.0:
-			continue
-		if Vector2(px + 17.0, pz + 12.0).length() < 8.0:
-			continue
-		_add_tree(Vector3(px, _terrain_height(px, pz), pz), i)
-	for i in range(48):
-		var px := rng.randf_range(-66.0, 66.0)
-		var pz := rng.randf_range(-66.0, 66.0)
-		if absf(px) < 7.0 and pz < 12.0 and pz > -31.0:
-			continue
-		if Vector2(px + 4.0, pz + 42.0).length() < 21.0:
-			continue
-		_add_plant(Vector3(px, _terrain_height(px, pz), pz), i)
-	for i in range(16):
-		var px := rng.randf_range(-66.0, 66.0)
-		var pz := rng.randf_range(-66.0, 66.0)
-		if absf(px) < 9.0 and pz < 12.0 and pz > -30.0:
-			continue
-		_add_rock(Vector3(px, _terrain_height(px, pz), pz), i)
-	for i in range(42):
-		var px := rng.randf_range(-67.0, 67.0)
-		var pz := rng.randf_range(-67.0, 67.0)
-		if absf(px) < 8.0 and pz < 12.0 and pz > -31.0:
-			continue
-		if Vector2(px + 4.0, pz + 42.0).length() < 21.0:
-			continue
-		_add_grass_tuft(Vector3(px, _terrain_height(px, pz), pz), i)
-
-	_build_biome_details(rng)
-	_build_biome_floor_patches()
-	# Zona inicial sem árvores/rochas: planície segura e espaço para expansão posterior.
-	# Cobertura extra de chão removida nesta versão mobile: evita centenas de nós adicionais.
+	add_child(ground_body)
 
 func _build_biome_ground_cover(rng: RandomNumberGenerator) -> void:
 	# Sub-bosque em manchas: vegetação baixa acompanha as copas, sem cobrir tudo.
@@ -962,28 +910,8 @@ func _make_terrain_texture(asset_name: String, base_color: Color, accent_color: 
 	return asset
 
 func _terrain_height(x: float, z: float) -> float:
-	var edge_factor := clampf((maxf(absf(x), absf(z)) - 2.0) / 23.0, 0.0, 1.0)
-	# Maciço principal: crista larga e irregular no ponto inicial do explorador.
-	# A combinação de gaussianas cria encostas longas, ombros e um cume caminhável.
-	var mountain_dx := x / 18.5
-	var mountain_dz := (z - 4.0) / 22.0
-	var mountain_core := exp(-(mountain_dx * mountain_dx * 1.35 + mountain_dz * mountain_dz * 1.05)) * 12.0
-	var summit_ridge := exp(-pow((x + sin(z * 0.075) * 3.5) / 8.5, 2.0)) * exp(-pow((z - 3.0) / 17.0, 2.0)) * 2.1
-	# Planície inicial: faixa ampla, baixa e suave; montanhas ficam afastadas do spawn.
-	var spawn_flat := clampf(1.0 - Vector2(x + 4.0, z + 42.0).length() / 18.0, 0.0, 1.0)
-	spawn_flat = spawn_flat * spawn_flat * (3.0 - 2.0 * spawn_flat)
-	# Ruído de baixa frequência forma vales e contrafortes; detalhe fino simula erosão.
-	var rolling := sin(x * 0.105 + z * 0.072) * 0.72 + cos(z * 0.091 - x * 0.063) * 0.54
-	var warped_x := x + sin(z * 0.075) * 3.2 + cos(z * 0.031) * 2.1
-	var ridge_a := pow(1.0 - absf(sin((warped_x + z * 0.22) * 0.082)), 2.0) * 1.55
-	var ridge_b := pow(1.0 - absf(sin((x * 0.17 - z * 0.31 + 11.0) * 0.071)), 2.5) * 0.95
-	var shoulder := pow(maxf(0.0, cos((x * 0.043 + z * 0.092) + sin(z * 0.035))), 5.0) * 0.58
-	var drainage := -pow(maxf(0.0, 1.0 - absf(sin(x * 0.052 + z * 0.12 + sin(z * 0.04) * 1.3))), 5.0) * 0.82
-	var detail := sin(x * 0.31 + z * 0.19) * 0.24 + cos(z * 0.27 - x * 0.23) * 0.19
-	var erosion := -absf(sin(x * 0.045 + z * 0.031)) * 0.38
-	var foothills := (rolling * 0.82 + ridge_a + ridge_b + shoulder + drainage + detail + erosion) * maxf(edge_factor, 0.28)
-	var natural_height := maxf(-0.32, foothills + mountain_core + summit_ridge)
-	return lerpf(natural_height, 0.18 + sin(x * 0.07) * 0.035 + cos(z * 0.08) * 0.035, spawn_flat)
+	# Terreno completamente plano na base da Etapa 1.
+	return 0.0
 
 func _add_reed(pos: Vector3, seed: int) -> void:
 	var reed_scene := _get_nature_scene(["Reed001", "Reed002"], seed)

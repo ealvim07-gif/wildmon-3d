@@ -58,6 +58,12 @@ func _make_grass_texture() -> Image:
 	image.generate_mipmaps()
 	return image
 
+func _terrain_normal(x: float, z: float) -> Vector3:
+	var e := 0.5
+	var dx := (height_at(x + e, z) - height_at(x - e, z)) / (2.0 * e)
+	var dz := (height_at(x, z + e) - height_at(x, z - e)) / (2.0 * e)
+	return Vector3(-dx, 1.0, -dz).normalized()
+
 func _build_chunks() -> void:
 	for cx in range(CHUNKS):
 		for cz in range(CHUNKS):
@@ -87,7 +93,6 @@ func _build_chunk(ox:float,oz:float) -> void:
 			st.set_uv(Vector2(x1 / 4.0, z0 / 4.0)); st.set_normal(_terrain_normal(x1,z0)); st.add_vertex(b)
 			st.set_uv(Vector2(x0 / 4.0, z1 / 4.0)); st.set_normal(_terrain_normal(x0,z1)); st.add_vertex(c)
 			st.set_uv(Vector2(x1 / 4.0, z1 / 4.0)); st.set_normal(_terrain_normal(x1,z1)); st.add_vertex(d)
-	var mesh:=st.commit()
 	var mesh:=st.commit()
 	var ground:=MeshInstance3D.new()
 	ground.mesh=mesh

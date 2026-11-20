@@ -75,6 +75,8 @@ class AnalogStick extends Control:
 		draw_circle(knob_position, radius * 0.48, Color(0.67, 0.82, 0.67, 0.94))
 		draw_arc(knob_position, radius * 0.48, 0.0, TAU, 48, Color(0.93, 0.98, 0.86, 0.95), 2.0, true)
 
+const USE_NEW_TERRAIN := true
+var generated_terrain: Node3D
 const MOVE_SPEED := 5.2
 const MOVE_ACCEL := 17.0
 const MOVE_DECEL := 22.0
@@ -301,31 +303,37 @@ func _build_world() -> void:
 	add_child(sun)
 
 	# Plano único de 400 x 400 m: sem Terrain3D, relevo, patches ou triângulos extras.
-	var ground := MeshInstance3D.new()
-	ground.name = "StableGrassPlane"
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(400.0, 400.0)
-	ground.mesh = plane
-	var grass := StandardMaterial3D.new()
-	grass.albedo_texture = ImageTexture.create_from_image(_make_terrain_albedo(false))
-	grass.albedo_color = Color(0.82, 0.90, 0.76)
-	grass.roughness = 1.0
-	grass.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	# Repetição UV: evita que uma textura minúscula fique esticada sobre 400 m.
-	grass.uv1_scale = Vector3(48.0, 48.0, 1.0)
-	ground.material_override = grass
-	add_child(ground)
-
-	var ground_body := StaticBody3D.new()
-	ground_body.name = "GroundCollision"
-	var ground_shape := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	shape.size = Vector3(400.0, 0.2, 400.0)
-	ground_shape.shape = shape
-	ground_shape.position.y = -0.1
-	ground_body.add_child(ground_shape)
-	add_child(ground_body)
-
+	if USE_NEW_TERRAIN:
+		var terrain_scene := load("res://scripts/world_terrain.gd")
+		generated_terrain = terrain_scene.new()
+		generated_terrain.name = "ChunkTerrain"
+		add_child(generated_terrain)
+	else:
+		# Plano B de 400 x 400 m, preservado.
+		var ground := MeshInstance3D.new()
+		ground.name = "StableGrassPlane"
+		var plane := PlaneMesh.new()
+		plane.size = Vector2(400.0, 400.0)
+		ground.mesh = plane
+		var grass := StandardMaterial3D.new()
+		grass.albedo_texture = ImageTexture.create_from_image(_make_terrain_albedo(false))
+		grass.albedo_color = Color(0.82, 0.90, 0.76)
+		grass.roughness = 1.0
+		grass.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		# Repetição UV: evita que uma textura minúscula fique esticada sobre 400 m.
+		grass.uv1_scale = Vector3(48.0, 48.0, 1.0)
+		ground.material_override = grass
+		add_child(ground)
+	
+		var ground_body := StaticBody3D.new()
+		ground_body.name = "GroundCollision"
+		var ground_shape := CollisionShape3D.new()
+		var shape := BoxShape3D.new()
+		shape.size = Vector3(400.0, 0.2, 400.0)
+		ground_shape.shape = shape
+		ground_shape.position.y = -0.1
+		ground_body.add_child(ground_shape)
+		add_child(ground_body)
 func _build_biome_ground_cover(rng: RandomNumberGenerator) -> void:
 	# Sub-bosque em manchas: vegetação baixa acompanha as copas, sem cobrir tudo.
 	var forest_centers := [Vector2(-31.0, -29.0), Vector2(31.0, -29.0), Vector2(-34.0, 34.0), Vector2(34.0, 34.0)]
@@ -867,7 +875,9 @@ func _terrain_vertex_color(x: float, z: float, height: float, noise: FastNoiseLi
 	return color
 
 func _terrain_height(x: float, z: float) -> float:
-	# Terreno completamente plano na base da Etapa 1.
+	if USE_NEW_TERRAIN and generated_terrain != null:
+		return generated_terrain.height_at(x, z)
+	# Plano B: terreno plano atual.
 	return 0.0
 
 func _add_reed(pos: Vector3, seed: int) -> void:

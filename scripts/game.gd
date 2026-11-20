@@ -76,8 +76,11 @@ class AnalogStick extends Control:
 		draw_arc(knob_position, radius * 0.48, 0.0, TAU, 48, Color(0.93, 0.98, 0.86, 0.95), 2.0, true)
 
 const MOVE_SPEED := 5.2
-const TURN_SPEED := 10.0
-const CAMERA_DISTANCE := 5.6
+const MOVE_ACCEL := 17.0
+const MOVE_DECEL := 22.0
+const TURN_SPEED := 8.0
+const CAMERA_DISTANCE := 5.2
+const CAMERA_MIN_CLEARANCE := 2.2
 
 var player: CharacterBody3D
 var player_model: Node3D
@@ -100,7 +103,7 @@ var look_yaw := 0.0
 var target_look_yaw := 0.0
 var look_pitch := 0.38
 var target_look_pitch := 0.38
-const CAMERA_SENSITIVITY := 0.00155
+const CAMERA_SENSITIVITY := 0.0030
 var nature_model_cache: Dictionary = {}
 var status_label: Label
 var variant_label: Label
@@ -130,9 +133,9 @@ func _input(event: InputEvent) -> void:
 		if event.pressed:
 			# A câmera usa somente a área livre do lado direito, sem disputar
 			# os botões de movimento e captura na parte inferior.
-			var in_camera_area: bool = event.position.x > screen_size.x * 0.44
-			in_camera_area = in_camera_area and event.position.y > screen_size.y * 0.17
-			in_camera_area = in_camera_area and event.position.y < screen_size.y * 0.66
+			var in_camera_area: bool = event.position.x > screen_size.x * 0.48
+			in_camera_area = in_camera_area and event.position.y > screen_size.y * 0.16
+			in_camera_area = in_camera_area and not (event.position.x > screen_size.x * 0.72 and event.position.y > screen_size.y * 0.78)
 			if in_camera_area and camera_touch_index == -1:
 				camera_touch_index = event.index
 				camera_drag_active = true
@@ -141,12 +144,12 @@ func _input(event: InputEvent) -> void:
 			camera_drag_active = false
 	elif event is InputEventScreenDrag and camera_drag_active and event.index == camera_touch_index:
 		target_look_yaw -= event.relative.x * CAMERA_SENSITIVITY
-		target_look_pitch = clampf(target_look_pitch + event.relative.y * CAMERA_SENSITIVITY, -0.62, 0.88)
+		target_look_pitch = clampf(target_look_pitch + event.relative.y * CAMERA_SENSITIVITY, -0.38, 0.72)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		var screen_size := get_viewport().get_visible_rect().size
-		var in_camera_area: bool = event.position.x > screen_size.x * 0.44
-		in_camera_area = in_camera_area and event.position.y > screen_size.y * 0.17
-		in_camera_area = in_camera_area and event.position.y < screen_size.y * 0.66
+		var in_camera_area: bool = event.position.x > screen_size.x * 0.48
+		in_camera_area = in_camera_area and event.position.y > screen_size.y * 0.16
+		in_camera_area = in_camera_area and not (event.position.x > screen_size.x * 0.72 and event.position.y > screen_size.y * 0.78)
 		camera_drag_active = event.pressed and in_camera_area
 	elif event is InputEventMouseMotion and camera_drag_active and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		target_look_yaw -= event.relative.x * CAMERA_SENSITIVITY
@@ -173,13 +176,18 @@ func _process(delta: float) -> void:
 	var desired_camera_position := target + cam_offset
 	# Câmera elevada: não deixa a própria encosta ficar entre a lente e o jogador.
 	# O antigo raycast colocava a câmera 42 cm para dentro da superfície atingida.
-	var camera_floor := _terrain_height(desired_camera_position.x, desired_camera_position.z) + 4.2
-	desired_camera_position.y = maxf(desired_camera_position.y + 1.8, camera_floor)
-	camera.global_position = camera.global_position.lerp(desired_camera_position, minf(delta * 6.0, 1.0))
-	# A margem é aplicada após a interpolação, usando a posição final da lente.
-	# Isso impede que a câmera atravesse a encosta durante a transição.
-	var actual_camera_floor := _terrain_height(camera.global_position.x, camera.global_position.z) + 5.0
-	camera.global_position.y = maxf(camera.global_position.y, actual_camera_floor)
+	desired_camera_position.y = maxf(desired_camera_position.y, _terrain_height(desired_camera_position.x, desired_camera_position.z) + CAMERA_MIN_CLEARANCE)
+	var camera_alpha := 1.0 - exp(-7.5 * delta)
+	camera.global_position = camera.global_position.lerp(desired_camera_position, camera_alpha)
+	# Colisão entre o alvo e a lente impede a câmera de atravessar encostas/árvores.
+	var camera_query := PhysicsRayQueryParameters3D.create(target, camera.global_position)
+	camera_query.collision_mask = 1
+	camera_query.exclude = [player.get_rid()]
+	var camera_hit := get_world_3d().direct_space_state.intersect_ray(camera_query)
+	if not camera_hit.is_empty():
+		camera.global_position = camera_hit.position + camera_hit.normal * 0.32
+	var final_floor := _terrain_height(camera.global_position.x, camera.global_position.z) + CAMERA_MIN_CLEARANCE
+	camera.global_position.y = maxf(camera.global_position.y, final_floor)
 	camera.look_at(target, Vector3.UP)
 	if creature and not creature_captured:
 		creature.rotate_y(delta * 0.55)
@@ -210,19 +218,24 @@ func _process(delta: float) -> void:
 func _physics_process(delta: float) -> void:
 	if player == null:
 		return
-	var input_dir := Vector2(movement_input.x, -movement_input.y)
+	var input_dir := movement_input
 	if input_dir.length() > 1.0:
 		input_dir = input_dir.normalized()
-	# Frente acompanha a direção para a qual a câmera olha.
-	var forward := Vector3(-sin(look_yaw), 0, -cos(look_yaw))
-	var right := Vector3(cos(look_yaw), 0, -sin(look_yaw))
-	var direction := right * input_dir.x + forward * input_dir.y
-	player.velocity.x = direction.x * MOVE_SPEED
-	player.velocity.z = direction.z * MOVE_SPEED
+	# Movimento relativo à câmera: cima no analógico sempre significa ir para frente.
+	var forward := Vector3(-sin(look_yaw), 0.0, -cos(look_yaw)).normalized()
+	var right := Vector3(cos(look_yaw), 0.0, -sin(look_yaw)).normalized()
+	var direction := (right * input_dir.x - forward * input_dir.y).normalized()
+	var target_velocity := direction * MOVE_SPEED
+	var horizontal_velocity := Vector3(player.velocity.x, 0.0, player.velocity.z)
+	var accel := MOVE_ACCEL if direction.length() > 0.08 else MOVE_DECEL
+	horizontal_velocity = horizontal_velocity.move_toward(target_velocity, accel * delta)
+	player.velocity.x = horizontal_velocity.x
+	player.velocity.z = horizontal_velocity.z
 	if not player.is_on_floor():
-		player.velocity.y -= 9.8 * delta
+		player.velocity.y -= 18.0 * delta
 	else:
-		player.velocity.y = 0
+		player.velocity.y = minf(player.velocity.y, 0.0)
+	player.floor_snap_length = 0.9
 	player.move_and_slide()
 	var bounded_position := player.global_position
 	bounded_position.x = clampf(bounded_position.x, -64.0, 64.0)
@@ -237,7 +250,7 @@ func _physics_process(delta: float) -> void:
 		player.global_position = Vector3(player.global_position.x, floor_height + 0.08, player.global_position.z)
 		player.velocity = Vector3.ZERO
 	if player_model:
-		var moving := direction.length() > 0.1
+		var moving := input_dir.length() > 0.12
 		var gait := sin(Time.get_ticks_msec() * 0.012) if moving else 0.0
 		player_model.position.y = absf(gait) * 0.045
 		player_model.rotation.z = lerpf(player_model.rotation.z, gait * 0.025, min(delta * 8.0, 1.0))
@@ -248,7 +261,7 @@ func _physics_process(delta: float) -> void:
 			var leg_target := gait * 0.58 * (1.0 if leg_index == 0 else -1.0) if moving else 0.0
 			player_leg_parts[leg_index].rotation.x = lerpf(player_leg_parts[leg_index].rotation.x, leg_target, minf(delta * 9.0, 1.0))
 	if direction.length() > 0.1:
-		player.rotation.y = lerp_angle(player.rotation.y, atan2(direction.x, direction.z) + PI, min(delta * TURN_SPEED, 1.0))
+		player.rotation.y = lerp_angle(player.rotation.y, atan2(direction.x, direction.z) + PI, 1.0 - exp(-TURN_SPEED * delta))
 
 func _build_world() -> void:
 	var world_env := WorldEnvironment.new()
@@ -309,7 +322,7 @@ func _build_world() -> void:
 	rng.seed = 81027
 	# Bosques em manchas irregulares, com árvores isoladas entre os grupos.
 	var grove_centers := [Vector2(-31.0, -29.0), Vector2(31.0, -29.0), Vector2(-34.0, 34.0), Vector2(34.0, 34.0)]
-	for i in range(100):
+	for i in range(48):
 		var px: float
 		var pz: float
 		if i % 7 == 0:
@@ -324,19 +337,19 @@ func _build_world() -> void:
 		if Vector2(px + 17.0, pz + 12.0).length() < 8.0:
 			continue
 		_add_tree(Vector3(px, _terrain_height(px, pz), pz), i)
-	for i in range(110):
+	for i in range(48):
 		var px := rng.randf_range(-66.0, 66.0)
 		var pz := rng.randf_range(-66.0, 66.0)
 		if absf(px) < 7.0 and pz < 12.0 and pz > -31.0:
 			continue
 		_add_plant(Vector3(px, _terrain_height(px, pz), pz), i)
-	for i in range(30):
+	for i in range(16):
 		var px := rng.randf_range(-66.0, 66.0)
 		var pz := rng.randf_range(-66.0, 66.0)
 		if absf(px) < 9.0 and pz < 12.0 and pz > -30.0:
 			continue
 		_add_rock(Vector3(px, _terrain_height(px, pz), pz), i)
-	for i in range(120):
+	for i in range(42):
 		var px := rng.randf_range(-67.0, 67.0)
 		var pz := rng.randf_range(-67.0, 67.0)
 		if absf(px) < 8.0 and pz < 12.0 and pz > -31.0:
@@ -345,14 +358,14 @@ func _build_world() -> void:
 
 	_build_biome_details(rng)
 	_build_biome_floor_patches()
-	_build_biome_ground_cover(rng)
+	# Cobertura extra de chão removida nesta versão mobile: evita centenas de nós adicionais.
 
 func _build_biome_ground_cover(rng: RandomNumberGenerator) -> void:
 	# Sub-bosque em manchas: vegetação baixa acompanha as copas, sem cobrir tudo.
 	var forest_centers := [Vector2(-31.0, -29.0), Vector2(31.0, -29.0), Vector2(-34.0, 34.0), Vector2(34.0, 34.0)]
 	for center_index in range(forest_centers.size()):
 		var center: Vector2 = forest_centers[center_index]
-		for i in range(12):
+		for i in range(7):
 			var angle := rng.randf_range(0.0, TAU)
 			var radius := sqrt(rng.randf()) * 11.0
 			var px := center.x + cos(angle) * radius
@@ -483,7 +496,7 @@ func _build_biome_details(rng: RandomNumberGenerator) -> void:
 	var outcrop_centers := [Vector2(48.0, 4.0), Vector2(-48.0, -5.0), Vector2(8.0, 49.0)]
 	for center_index in range(outcrop_centers.size()):
 		var center: Vector2 = outcrop_centers[center_index]
-		for i in range(13):
+		for i in range(7):
 			var angle := rng.randf_range(0.0, TAU)
 			var radius := rng.randf_range(1.5, 8.5)
 			var px := center.x + cos(angle) * radius * rng.randf_range(0.65, 1.25)
@@ -509,7 +522,7 @@ func _build_biome_details(rng: RandomNumberGenerator) -> void:
 	var meadow_centers := [Vector2(-37.0, 8.0), Vector2(35.0, 28.0)]
 	for center_index in range(meadow_centers.size()):
 		var center: Vector2 = meadow_centers[center_index]
-		for i in range(22):
+		for i in range(5):
 			var angle := rng.randf_range(0.0, TAU)
 			var radius := sqrt(rng.randf()) * 10.0
 			var px := center.x + cos(angle) * radius
@@ -830,11 +843,13 @@ func _build_terrain() -> void:
 
 	var terrain_material = ClassDB.instantiate("Terrain3DMaterial")
 	terrain_material.set("auto_shader", true)
-	terrain_material.set("dual_scaling", true)
+	terrain_material.set("dual_scaling", false)
+	terrain_material.set("max_regions", 64)
 	terrain.set("material", terrain_material)
 	terrain.set("collision_mask", 1)
-	terrain.set("mesh_lods", 5)
-	terrain.set("mesh_size", 24)
+	terrain.set("mesh_lods", 4)
+	terrain.set("mesh_size", 16)
+	terrain.set("cast_shadows", GeometryInstance3D.SHADOW_CASTING_SETTING_OFF)
 	print("WILDMON_TERRAIN3D_READY regions=", data.get_region_count(), " height_range=", data.get_height_range())
 
 func _make_terrain_albedo(rock: bool) -> Image:
@@ -1058,11 +1073,8 @@ func _set_scene_visibility_range(root: Node, range_end: float) -> void:
 	for child in root.get_children():
 		_set_scene_visibility_range(child, range_end)
 
-func _register_foliage_sway(foliage: Node3D, seed: int, strength: float) -> void:
-	foliage_sway_nodes.append(foliage)
-	foliage_sway_base_rotations.append(foliage.rotation)
-	foliage_sway_phases.append(float(seed % 97) * 0.173)
-	foliage_sway_strengths.append(strength)
+func _register_foliage_sway(_foliage: Node3D, _seed: int, _strength: float) -> void:
+	# Vegetação estática no Android reduz custo de CPU por frame.
 
 func _add_plant(pos: Vector3, seed: int) -> void:
 	var plant_scene := _get_nature_scene(["Fern_1", "Bush_Common", "Clover_1", "Flower_3_Group", "Bush001", "Bush002", "Reed001", "Reed002"], seed)
@@ -1175,7 +1187,9 @@ func _build_player() -> void:
 
 	camera = Camera3D.new()
 	camera.current = true
-	camera.fov = 66
+	camera.fov = 62
+	camera.near = 0.18
+	camera.far = 180.0
 	add_child(camera)
 	camera.global_position = Vector3(0.0, player.global_position.y + 2.7, 10.8)
 	camera.look_at(player.global_position + Vector3(0.0, 1.15, 0.0))

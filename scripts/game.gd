@@ -1330,7 +1330,7 @@ func _build_start_menu() -> void:
 	subtitle.add_theme_font_size_override("font_size", 16)
 	box.add_child(subtitle)
 	var start_button := Button.new()
-	start_button.text = "INICIAR"
+	start_button.text = "Iniciar"
 	start_button.custom_minimum_size = Vector2(0, 76)
 	start_button.add_theme_font_size_override("font_size", 25)
 	start_button.pressed.connect(_start_game)

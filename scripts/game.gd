@@ -315,7 +315,10 @@ func _build_world() -> void:
 	grass.albedo_texture = ImageTexture.create_from_image(_make_terrain_albedo(false))
 	grass.albedo_color = Color(0.82, 0.90, 0.76)
 	grass.roughness = 1.0
-	grass.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	grass.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	# Repetição UV: evita que uma textura minúscula fique esticada sobre 400 m.
+	grass.uv1_scale = Vector3(48.0, 48.0, 1.0)
+	grass.material_mode = StandardMaterial3D.MATERIAL_MODE_SPATIAL
 	ground.material_override = grass
 	add_child(ground)
 
@@ -822,23 +825,27 @@ func _build_terrain() -> void:
 	print("WILDMON_TERRAIN3D_READY regions=", data.get_region_count(), " height_range=", data.get_height_range())
 
 func _make_terrain_albedo(rock: bool) -> Image:
-	var image := Image.create(128, 128, false, Image.FORMAT_RGBA8)
-	var noise := FastNoiseLite.new()
-	noise.seed = 551 if rock else 418
-	noise.frequency = 0.075 if rock else 0.11
+	# Textura procedural de grama em tile: variação macro, micro e pequenas fibras.
+	var image := Image.create(256, 256, false, Image.FORMAT_RGBA8)
+	var broad := FastNoiseLite.new()
+	broad.seed = 418
+	broad.frequency = 0.035
 	var detail := FastNoiseLite.new()
-	detail.seed = 991 if rock else 733
-	detail.frequency = 0.42
-	for y in range(128):
-		for x in range(128):
-			var broad := noise.get_noise_2d(float(x), float(y))
-			var fine := detail.get_noise_2d(float(x), float(y))
-			var grain := broad * 0.11 + fine * 0.045
-			var color: Color
-			if rock:
-				color = Color(0.43, 0.42, 0.38).lerp(Color(0.68, 0.65, 0.58), clampf(0.5 + grain * 2.8, 0.0, 1.0))
-			else:
-				color = Color(0.19, 0.29, 0.12).lerp(Color(0.43, 0.49, 0.25), clampf(0.5 + grain * 3.2, 0.0, 1.0))
+	detail.seed = 733
+	detail.frequency = 0.19
+	var grain := FastNoiseLite.new()
+	grain.seed = 991
+	grain.frequency = 0.62
+	for y in range(256):
+		for x in range(256):
+			var n1 := broad.get_noise_2d(float(x), float(y))
+			var n2 := detail.get_noise_2d(float(x), float(y))
+			var n3 := grain.get_noise_2d(float(x), float(y))
+			var fleck := sin(float(x) * 1.7 + n2 * 8.0) * cos(float(y) * 1.3 + n3 * 7.0) * 0.035
+			var value := clampf(0.5 + n1 * 0.25 + n2 * 0.18 + n3 * 0.09 + fleck, 0.0, 1.0)
+			var dark := Color(0.105, 0.23, 0.075)
+			var light := Color(0.34, 0.47, 0.20)
+			var color := dark.lerp(light, value)
 			image.set_pixel(x, y, Color(color.r, color.g, color.b, 1.0))
 	image.generate_mipmaps()
 	return image

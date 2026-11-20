@@ -879,13 +879,17 @@ func _terrain_normal(x: float, z: float) -> Vector3:
 	return Vector3(-slope_x, 1.0, -slope_z).normalized()
 
 func _terrain_vertex_color(x: float, z: float, height: float, noise: FastNoiseLite) -> Color:
-	var variation := noise.get_noise_2d(x, z) * 0.075 + sin(x * 0.21 + z * 0.16) * 0.018
-	var lowland := Color(0.31, 0.43, 0.23)
-	var hillside := Color(0.39, 0.47, 0.27)
-	var rocky := Color(0.47, 0.45, 0.38)
-	var color := lowland.lerp(hillside, smoothstep(0.0, 1.8, height))
-	color = color.lerp(rocky, smoothstep(1.7, 3.4, height) * 0.72)
-	color += Color(variation, variation, variation * 0.72, 0.0)
+	var variation := noise.get_noise_2d(x, z) * 0.095 + sin(x * 0.21 + z * 0.16) * 0.025
+	var lowland := Color(0.25, 0.37, 0.19)
+	var hillside := Color(0.34, 0.43, 0.25)
+	var alpine_grass := Color(0.39, 0.43, 0.30)
+	var rocky := Color(0.48, 0.46, 0.40)
+	var exposed_stone := Color(0.57, 0.55, 0.49)
+	var color := lowland.lerp(hillside, smoothstep(-0.2, 3.2, height))
+	color = color.lerp(alpine_grass, smoothstep(3.0, 6.0, height) * 0.62)
+	color = color.lerp(rocky, smoothstep(6.0, 9.0, height) * 0.68)
+	color = color.lerp(exposed_stone, smoothstep(9.0, 13.0, height) * 0.55)
+	color += Color(variation, variation, variation * 0.78, 0.0)
 	return color
 
 func _make_terrain_texture(asset_name: String, base_color: Color, accent_color: Color, noise_seed: int) -> Terrain3DTextureAsset:
@@ -935,16 +939,23 @@ func _make_terrain_texture(asset_name: String, base_color: Color, accent_color: 
 
 func _terrain_height(x: float, z: float) -> float:
 	var edge_factor := clampf((maxf(absf(x), absf(z)) - 2.0) / 23.0, 0.0, 1.0)
-	# Relevo com cristas compridas, ombros assimétricos e pequenos vales de erosão.
-	var rolling := sin(x * 0.105 + z * 0.072) * 0.48 + cos(z * 0.091 - x * 0.063) * 0.38
+	# Maciço principal: crista larga e irregular no ponto inicial do explorador.
+	# A combinação de gaussianas cria encostas longas, ombros e um cume caminhável.
+	var mountain_dx := x / 18.5
+	var mountain_dz := (z - 4.0) / 22.0
+	var mountain_core := exp(-(mountain_dx * mountain_dx * 1.35 + mountain_dz * mountain_dz * 1.05)) * 12.0
+	var summit_ridge := exp(-pow((x + sin(z * 0.075) * 3.5) / 8.5, 2.0)) * exp(-pow((z - 3.0) / 17.0, 2.0)) * 2.1
+	# Ruído de baixa frequência forma vales e contrafortes; detalhe fino simula erosão.
+	var rolling := sin(x * 0.105 + z * 0.072) * 0.72 + cos(z * 0.091 - x * 0.063) * 0.54
 	var warped_x := x + sin(z * 0.075) * 3.2 + cos(z * 0.031) * 2.1
-	var ridge_a := pow(1.0 - absf(sin((warped_x + z * 0.22) * 0.082)), 2.0) * 1.72
-	var ridge_b := pow(1.0 - absf(sin((x * 0.17 - z * 0.31 + 11.0) * 0.071)), 2.5) * 1.05
-	var shoulder := pow(maxf(0.0, cos((x * 0.043 + z * 0.092) + sin(z * 0.035))), 5.0) * 0.42
-	var drainage := -pow(maxf(0.0, 1.0 - absf(sin(x * 0.052 + z * 0.12 + sin(z * 0.04) * 1.3))), 5.0) * 0.62
-	var detail := sin(x * 0.31 + z * 0.19) * 0.19 + cos(z * 0.27 - x * 0.23) * 0.15
-	var erosion := -absf(sin(x * 0.045 + z * 0.031)) * 0.30
-	return maxf(-0.32, (rolling * 0.82 + ridge_a + ridge_b + shoulder + drainage + detail + erosion) * maxf(edge_factor, 0.28))
+	var ridge_a := pow(1.0 - absf(sin((warped_x + z * 0.22) * 0.082)), 2.0) * 1.55
+	var ridge_b := pow(1.0 - absf(sin((x * 0.17 - z * 0.31 + 11.0) * 0.071)), 2.5) * 0.95
+	var shoulder := pow(maxf(0.0, cos((x * 0.043 + z * 0.092) + sin(z * 0.035))), 5.0) * 0.58
+	var drainage := -pow(maxf(0.0, 1.0 - absf(sin(x * 0.052 + z * 0.12 + sin(z * 0.04) * 1.3))), 5.0) * 0.82
+	var detail := sin(x * 0.31 + z * 0.19) * 0.24 + cos(z * 0.27 - x * 0.23) * 0.19
+	var erosion := -absf(sin(x * 0.045 + z * 0.031)) * 0.38
+	var foothills := (rolling * 0.82 + ridge_a + ridge_b + shoulder + drainage + detail + erosion) * maxf(edge_factor, 0.28)
+	return maxf(-0.32, foothills + mountain_core + summit_ridge)
 
 func _add_reed(pos: Vector3, seed: int) -> void:
 	var reed_scene := _get_nature_scene(["Reed001", "Reed002"], seed)
@@ -1099,7 +1110,7 @@ func _snap_player_to_terrain() -> void:
 
 func _build_player() -> void:
 	player = CharacterBody3D.new()
-	player.position = Vector3(0.0, _terrain_height(0.0, 4.0) + 0.06, 4.0)
+	player.position = Vector3(0.0, _terrain_height(0.0, 4.0) + 0.12, 4.0) # Início no cume do maciço principal.
 	add_child(player)
 
 	var body := CollisionShape3D.new()

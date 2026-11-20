@@ -121,7 +121,7 @@ func _ready() -> void:
 	_build_world()
 	_build_player()
 	await get_tree().physics_frame
-	_snap_player_to_terrain()
+	await _snap_player_to_terrain()
 	_build_ui()
 	_load_collection()
 	_build_creature()
@@ -225,6 +225,8 @@ func _physics_process(delta: float) -> void:
 	var forward := Vector3(-sin(look_yaw), 0.0, -cos(look_yaw)).normalized()
 	var right := Vector3(cos(look_yaw), 0.0, -sin(look_yaw)).normalized()
 	var direction := (right * input_dir.x - forward * input_dir.y).normalized()
+	if player.is_on_floor() and direction.length_squared() > 0.001:
+		direction = direction.slide(player.get_floor_normal()).normalized()
 	var target_velocity := direction * MOVE_SPEED
 	var horizontal_velocity := Vector3(player.velocity.x, 0.0, player.velocity.z)
 	var accel := MOVE_ACCEL if direction.length() > 0.08 else MOVE_DECEL
@@ -998,6 +1000,7 @@ func _add_grass_tuft(pos: Vector3, seed: int) -> void:
 	var grass_scene := _get_nature_scene(["Grass_Common_Tall", "Clover_1", "Grass001", "Grass002"], seed)
 	if grass_scene:
 		var grass := grass_scene.instantiate() as Node3D
+		_disable_scene_shadows(grass)
 		add_child(grass)
 		_set_scene_visibility_range(grass, 42.0)
 		grass.position = pos
@@ -1019,6 +1022,7 @@ func _add_tree(pos: Vector3, seed: int) -> void:
 	var tree_scene := _get_nature_scene(["CommonTree_1", "CommonTree_2", "CommonTree_3", "Pine_1", "Pine_2", "TreeHigh001", "TreeHigh002", "TreeHigh003"], seed)
 	if tree_scene:
 		var tree := tree_scene.instantiate() as Node3D
+		_disable_scene_shadows(tree)
 		add_child(tree)
 		_set_scene_visibility_range(tree, 108.0)
 		tree.position = pos
@@ -1073,6 +1077,12 @@ func _set_scene_visibility_range(root: Node, range_end: float) -> void:
 	for child in root.get_children():
 		_set_scene_visibility_range(child, range_end)
 
+func _disable_scene_shadows(node: Node) -> void:
+	if node is GeometryInstance3D:
+		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for child in node.get_children():
+		_disable_scene_shadows(child)
+
 func _register_foliage_sway(_foliage: Node3D, _seed: int, _strength: float) -> void:
 	# Vegetação estática no Android reduz custo de CPU por frame.
 
@@ -1080,6 +1090,7 @@ func _add_plant(pos: Vector3, seed: int) -> void:
 	var plant_scene := _get_nature_scene(["Fern_1", "Bush_Common", "Clover_1", "Flower_3_Group", "Bush001", "Bush002", "Reed001", "Reed002"], seed)
 	if plant_scene:
 		var plant := plant_scene.instantiate() as Node3D
+		_disable_scene_shadows(plant)
 		add_child(plant)
 		_set_scene_visibility_range(plant, 58.0)
 		plant.position = pos
@@ -1099,15 +1110,27 @@ func _add_plant(pos: Vector3, seed: int) -> void:
 	add_child(stem)
 
 func _snap_player_to_terrain() -> void:
-	# Posiciona o explorador pela colisão real do terreno, não por uma estimativa.
-	var origin := Vector3(player.global_position.x, 80.0, player.global_position.z)
-	var destination := Vector3(player.global_position.x, -30.0, player.global_position.z)
-	var query := PhysicsRayQueryParameters3D.create(origin, destination)
-	query.collision_mask = 1
-	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	# Aguarda a GDExtension concluir a geração da colisão antes de posicionar o jogador.
+	var hit: Dictionary = {}
+	for attempt in range(8):
+		await get_tree().physics_frame
+		var origin := Vector3(player.global_position.x, 80.0, player.global_position.z)
+		var destination := Vector3(player.global_position.x, -30.0, player.global_position.z)
+		var query := PhysicsRayQueryParameters3D.create(origin, destination)
+		query.collision_mask = 1
+		hit = get_world_3d().direct_space_state.intersect_ray(query)
+		if not hit.is_empty():
+			break
+	# Fallback determinístico pelo mesmo heightmap que alimenta o Terrain3D.
+	var floor_y := _terrain_height(player.global_position.x, player.global_position.z)
 	if not hit.is_empty():
-		player.global_position.y = hit.position.y + 0.10
-		player.velocity = Vector3.ZERO
+		floor_y = float(hit.position.y)
+	player.global_position = Vector3(player.global_position.x, floor_y + 0.14, player.global_position.z)
+	player.velocity = Vector3.ZERO
+	player.reset_physics_interpolation()
+	if camera:
+		camera.global_position = player.global_position + Vector3(0.0, 3.0, 7.0)
+		camera.look_at(player.global_position + Vector3(0.0, 1.2, 0.0))
 
 func _build_player() -> void:
 	player = CharacterBody3D.new()
@@ -1122,7 +1145,7 @@ func _build_player() -> void:
 	body.position.y = 0.90
 	player.add_child(body)
 	player.floor_snap_length = 0.55
-	player.floor_max_angle = deg_to_rad(48.0)
+	player.floor_max_angle = deg_to_rad(56.0)
 	player.safe_margin = 0.04
 
 	player_model = Node3D.new()
@@ -1189,8 +1212,11 @@ func _build_player() -> void:
 	camera.current = true
 	camera.fov = 62
 	camera.near = 0.18
-	camera.far = 180.0
+	camera.far = 140.0
 	add_child(camera)
+	var terrain_for_camera := get_node_or_null("Terrain3D")
+	if terrain_for_camera and terrain_for_camera.has_method("set_camera"):
+		terrain_for_camera.call("set_camera", camera)
 	camera.global_position = Vector3(0.0, player.global_position.y + 2.7, 10.8)
 	camera.look_at(player.global_position + Vector3(0.0, 1.15, 0.0))
 

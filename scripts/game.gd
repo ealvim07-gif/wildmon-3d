@@ -1105,9 +1105,14 @@ func _disable_scene_shadows(node: Node) -> void:
 	for child in node.get_children():
 		_disable_scene_shadows(child)
 
-func _register_foliage_sway(_foliage: Node3D, _seed: int, _strength: float) -> void:
-	# Vegetação estática no Android reduz custo de CPU por frame.
-	pass
+func _register_foliage_sway(foliage: Node3D, seed: int, strength: float) -> void:
+	# Vento procedural de baixa frequência: só objetos já instanciados, sem partículas.
+	if foliage_sway_nodes.size() >= 96:
+		return
+	foliage_sway_nodes.append(foliage)
+	foliage_sway_base_rotations.append(foliage.rotation)
+	foliage_sway_phases.append(float(seed % 97) * 0.173)
+	foliage_sway_strengths.append(strength)
 
 func _add_plant(pos: Vector3, seed: int) -> void:
 	var plant_scene := _get_nature_scene(["Fern_1", "Bush_Common", "Clover_1", "Flower_3_Group", "Bush001", "Bush002", "Reed001", "Reed002"], seed)

@@ -2,7 +2,7 @@ name: Validate Wildmon 3D world
 
 on:
   push:
-    branches: [main]
+    branches: [main, mundo-vivo]
   workflow_dispatch:
 
 permissions:

@@ -36,13 +36,6 @@ jobs:
           chmod +x scripts/fetch_world_assets.sh
           scripts/fetch_world_assets.sh
 
-      - name: Install Terrain3D Android and Linux binaries
-        shell: bash
-        run: |
-          set -euo pipefail
-          chmod +x scripts/fetch_terrain3d.sh
-          scripts/fetch_terrain3d.sh
-
       - name: Import project and validate GDExtension
         shell: bash
         run: |

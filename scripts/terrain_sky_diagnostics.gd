@@ -12,7 +12,8 @@ func _run_tests() -> void:
 	var game := packed.instantiate()
 	root.add_child(game)
 	await process_frame
-	await physics_frame
+	# Diagnóstico ativa o mundo por meio do mesmo fluxo de início da tela inicial.
+	await game.call("_start_game")
 	await physics_frame
 
 	var ground := game.find_child("StableGrassPlane", true, false) as MeshInstance3D

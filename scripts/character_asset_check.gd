@@ -5,6 +5,7 @@ const ANIM_PATH := "res://assets/characters/UAL1_Standard.glb"
 const OUTPUT_PATH := "assets/characters/animations_list.txt"
 
 var animation_names: Array[String] = []
+var report := ""
 
 func _initialize() -> void:
 	print("=== CHARACTER ASSET IMPORT CHECK ===")
@@ -14,6 +15,11 @@ func _initialize() -> void:
 		quit(1)
 		return
 	print("MODEL IMPORT OK: ", MODEL_PATH, " (", model.get_class(), ")")
+	if model is PackedScene:
+		var model_instance: Node = model.instantiate()
+		print("--- MODEL ANIMATION PLAYERS / SKELETONS ---")
+		_inspect_nodes(model_instance, "MODEL")
+		model_instance.free()
 	var animation_asset = ResourceLoader.load(ANIM_PATH)
 	if animation_asset == null:
 		push_error("ANIMATION GLB IMPORT FAILED: " + ANIM_PATH)
@@ -25,36 +31,43 @@ func _initialize() -> void:
 		quit(1)
 		return
 	var instance: Node = animation_asset.instantiate()
-	_collect_animation_players(instance)
+	print("--- UAL1 ANIMATION PLAYERS / SKELETONS ---")
+	_inspect_nodes(instance, "UAL1")
 	instance.free()
 	if animation_names.is_empty():
-		push_error("No animations found in imported UAL1 scene.")
+		push_error("No animations found in imported character assets.")
 		quit(1)
 		return
-	var output := "Animations found in UAL1_Standard.glb\n"
-	output += "Model import: OK\nAnimation GLB import: OK\n\n"
-	for animation_name in animation_names:
-		output += animation_name + "\n"
 	var absolute_path := OS.get_environment("GITHUB_WORKSPACE").path_join(OUTPUT_PATH)
 	var file := FileAccess.open(absolute_path, FileAccess.WRITE)
 	if file == null:
 		push_error("Could not write animation list file: " + absolute_path)
 		quit(1)
 		return
-	file.store_string(output)
+	file.store_string(report)
 	file.close()
-	print("ANIMATION LIST FILE WRITTEN: ", absolute_path)
-	print(output)
+	print("ANIMATION/SKELETON REPORT WRITTEN: ", absolute_path)
+	print(report)
 	print("=== IMPORT CHECK COMPLETE ===")
 	quit(0)
 
-func _collect_animation_players(node: Node) -> void:
+func _inspect_nodes(node: Node, asset_name: String) -> void:
 	if node is AnimationPlayer:
+		report += "\n[" + asset_name + "] AnimationPlayer: " + str(node.get_path()) + "\n"
+		print("PLAYER ", asset_name, " ", node.get_path())
 		for library_name in node.get_animation_library_list():
 			var library: AnimationLibrary = node.get_animation_library(library_name)
-			for animation_name in library.get_animation_list():
-				var full_name := str(library_name) + "/" + str(animation_name)
+			for anim_name in library.get_animation_list():
+				var full_name := str(library_name) + "/" + str(anim_name)
 				animation_names.append(full_name)
-				print("ANIMATION: ", full_name)
+				report += "ANIMATION: " + full_name + "\n"
+				print("ANIMATION: ", asset_name, " ", full_name)
+	if node is Skeleton3D:
+		report += "\n[" + asset_name + "] Skeleton3D: " + str(node.get_path()) + "\n"
+		print("SKELETON ", asset_name, " ", node.get_path(), " bone_count=", node.get_bone_count())
+		for bone_index in range(node.get_bone_count()):
+			var bone_name := node.get_bone_name(bone_index)
+			report += "BONE " + str(bone_index) + ": " + bone_name + "\n"
+			print("BONE ", asset_name, " ", bone_index, " ", bone_name)
 	for child in node.get_children():
-		_collect_animation_players(child)
+		_inspect_nodes(child, asset_name)

@@ -116,6 +116,12 @@ var foliage_sway_phases: Array[float] = []
 var foliage_sway_strengths: Array[float] = []
 var camera_drag_active := false
 var camera_touch_index := -1
+var started := false
+var start_menu: Control
+var wind_phase := 0.0
+var day_time := 0.32
+var sun_node: DirectionalLight3D
+var weather_strength := 0.0
 
 func _ready() -> void:
 	_build_world()
@@ -123,9 +129,8 @@ func _ready() -> void:
 	await get_tree().physics_frame
 	await _snap_player_to_terrain()
 	_build_ui()
-	_load_collection()
-	_build_creature()
-	_update_status("Explore o vale e encontre uma criatura!")
+	_build_start_menu()
+	_update_status("Exploração livre — beta de ambiente")
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
@@ -157,6 +162,11 @@ func _input(event: InputEvent) -> void:
 
 func _process(delta: float) -> void:
 	if player == null:
+		return
+	wind_phase += delta * 0.55
+	day_time = fmod(day_time + delta * 0.0008, 1.0)
+	_update_day_cycle()
+	if not started:
 		return
 	# Brisa suave em vegetação baixa; anima apenas raízes já instanciadas.
 	var wind_time := Time.get_ticks_msec() * 0.001
@@ -216,7 +226,7 @@ func _process(delta: float) -> void:
 				_update_status("Explore o vale e encontre uma criatura!")
 
 func _physics_process(delta: float) -> void:
-	if player == null:
+	if player == null or not started:
 		return
 	var input_dir := movement_input
 	if input_dir.length() > 1.0:
@@ -302,6 +312,7 @@ func _build_world() -> void:
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 32.0
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	sun_node = sun
 	add_child(sun)
 
 	_build_terrain()
@@ -360,6 +371,7 @@ func _build_world() -> void:
 
 	_build_biome_details(rng)
 	_build_biome_floor_patches()
+	# Zona inicial sem árvores/rochas: planície segura e espaço para expansão posterior.
 	# Cobertura extra de chão removida nesta versão mobile: evita centenas de nós adicionais.
 
 func _build_biome_ground_cover(rng: RandomNumberGenerator) -> void:
@@ -951,6 +963,9 @@ func _terrain_height(x: float, z: float) -> float:
 	var mountain_dz := (z - 4.0) / 22.0
 	var mountain_core := exp(-(mountain_dx * mountain_dx * 1.35 + mountain_dz * mountain_dz * 1.05)) * 12.0
 	var summit_ridge := exp(-pow((x + sin(z * 0.075) * 3.5) / 8.5, 2.0)) * exp(-pow((z - 3.0) / 17.0, 2.0)) * 2.1
+	# Planície inicial: faixa ampla, baixa e suave; montanhas ficam afastadas do spawn.
+	var spawn_flat := clampf(1.0 - Vector2(x + 4.0, z + 42.0).length() / 18.0, 0.0, 1.0)
+	spawn_flat = spawn_flat * spawn_flat * (3.0 - 2.0 * spawn_flat)
 	# Ruído de baixa frequência forma vales e contrafortes; detalhe fino simula erosão.
 	var rolling := sin(x * 0.105 + z * 0.072) * 0.72 + cos(z * 0.091 - x * 0.063) * 0.54
 	var warped_x := x + sin(z * 0.075) * 3.2 + cos(z * 0.031) * 2.1
@@ -961,7 +976,8 @@ func _terrain_height(x: float, z: float) -> float:
 	var detail := sin(x * 0.31 + z * 0.19) * 0.24 + cos(z * 0.27 - x * 0.23) * 0.19
 	var erosion := -absf(sin(x * 0.045 + z * 0.031)) * 0.38
 	var foothills := (rolling * 0.82 + ridge_a + ridge_b + shoulder + drainage + detail + erosion) * maxf(edge_factor, 0.28)
-	return maxf(-0.32, foothills + mountain_core + summit_ridge)
+	var natural_height := maxf(-0.32, foothills + mountain_core + summit_ridge)
+	return lerpf(natural_height, 0.18 + sin(x * 0.07) * 0.035 + cos(z * 0.08) * 0.035, spawn_flat)
 
 func _add_reed(pos: Vector3, seed: int) -> void:
 	var reed_scene := _get_nature_scene(["Reed001", "Reed002"], seed)
@@ -1135,7 +1151,7 @@ func _snap_player_to_terrain() -> void:
 
 func _build_player() -> void:
 	player = CharacterBody3D.new()
-	player.position = Vector3(0.0, _terrain_height(0.0, 4.0) + 0.12, 4.0) # Início no cume do maciço principal.
+	player.position = Vector3(-4.0, _terrain_height(-4.0, -42.0) + 0.12, -42.0) # Planície inicial segura.
 	add_child(player)
 
 	var body := CollisionShape3D.new()

@@ -53,7 +53,7 @@ func _initialize() -> void:
 
 func _inspect_nodes(node: Node, asset_name: String) -> void:
 	if node is AnimationPlayer:
-		report += "\n[" + asset_name + "] AnimationPlayer: " + str(node.get_path()) + "\n"
+		report += "\n[" + asset_name + "] AnimationPlayer: " + str(node.name) + "\n"
 		print("PLAYER ", asset_name, " ", node.get_path())
 		for library_name in node.get_animation_library_list():
 			var library: AnimationLibrary = node.get_animation_library(library_name)

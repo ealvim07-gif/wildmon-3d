@@ -11,6 +11,22 @@ var height_noise := FastNoiseLite.new()
 var lake_noise := FastNoiseLite.new()
 var grass_texture: ImageTexture
 
+func _make_marker_rock(position_x: float, position_z: float, size: Vector3) -> void:
+	var rock := MeshInstance3D.new()
+	var mesh := SphereMesh.new()
+	mesh.radius = 1.0
+	mesh.height = 1.4
+	mesh.radial_segments = 7
+	mesh.rings = 4
+	rock.mesh = mesh
+	rock.scale = size
+	rock.position = Vector3(position_x, size.y * 0.55, position_z)
+	var stone := StandardMaterial3D.new()
+	stone.albedo_color = Color(0.45, 0.48, 0.39)
+	stone.roughness = 1.0
+	rock.material_override = stone
+	add_child(rock)
+
 func _ready() -> void:
 	height_noise.seed = 82471
 	height_noise.frequency = 0.009
@@ -53,7 +69,7 @@ func _make_grass_texture() -> Image:
 			var n3:=grain.get_noise_2d(float(x),float(y))
 			var fleck:=sin(float(x)*1.7+n2*8.0)*cos(float(y)*1.3+n3*7.0)*0.035
 			var value:=clampf(0.5+n1*0.25+n2*0.18+n3*0.09+fleck,0.0,1.0)
-			var color:=Color(0.105,0.23,0.075).lerp(Color(0.34,0.47,0.20),value)
+			var color:=Color(0.19,0.36,0.11).lerp(Color(0.46,0.61,0.29),value)
 			image.set_pixel(x,y,Color(color.r,color.g,color.b,1.0))
 	image.generate_mipmaps()
 	return image
@@ -71,6 +87,11 @@ func _build_chunks() -> void:
 			var oz:float=(float(cz)-CHUNKS*0.5)*CHUNK_SIZE
 			_build_chunk(ox,oz)
 			_build_water_chunk(ox,oz)
+	# Pedras de orientação na direção do lago (+X), dentro da área alcançável.
+	_make_marker_rock(18.0, -42.0, Vector3(0.65,0.42,0.58))
+	_make_marker_rock(34.0, -42.0, Vector3(0.9,0.55,0.75))
+	_make_marker_rock(50.0, -42.0, Vector3(1.1,0.7,0.9))
+	_make_marker_rock(56.0, -36.0, Vector3(0.7,0.45,0.65))
 
 func _build_chunk(ox:float,oz:float) -> void:
 	var st:=SurfaceTool.new()
@@ -103,6 +124,7 @@ func _build_chunk(ox:float,oz:float) -> void:
 	mat.uv1_scale=Vector3(1.0,1.0,1.0)
 	mat.albedo_color=Color(1.0,1.0,1.0)
 	mat.shading_mode=BaseMaterial3D.SHADING_MODE_PER_PIXEL
+	mat.disable_receive_shadows=true
 	ground.material_override=mat
 	add_child(ground)
 	var body:=StaticBody3D.new()

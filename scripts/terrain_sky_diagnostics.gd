@@ -20,7 +20,9 @@ func _run_tests() -> void:
 	var terrain := game.find_child("Terrain3D", true, false)
 	var world_environment := _find_typed_node(game, "WorldEnvironment") as WorldEnvironment
 	var player := _find_typed_node(game, "CharacterBody3D") as CharacterBody3D
-	var camera := _find_typed_node(game, "Camera3D") as Camera3D
+	var camera := game.get("camera") as Camera3D
+	if camera == null:
+		camera = _find_typed_node(game, "Camera3D") as Camera3D
 
 	if terrain == null or terrain.get_class() != "Terrain3D":
 		_fail("O terreno principal não é uma instância real do Terrain3D.")
@@ -52,7 +54,7 @@ func _run_tests() -> void:
 	await process_frame
 	var camera_floor: float = game.call("_terrain_height", camera.global_position.x, camera.global_position.z)
 	if camera.global_position.y < camera_floor + 1.0:
-		_fail("A câmera ficou abaixo da margem segura sobre o terreno.")
+		_fail("A câmera ficou abaixo da margem segura sobre o terreno. camera_y=%.2f terrain_y=%.2f" % [camera.global_position.y, camera_floor])
 		return
 	if player.global_position.y < game.call("_terrain_height", player.global_position.x, player.global_position.z) - 0.35:
 		_fail("O protagonista iniciou abaixo da superfície do mapa.")

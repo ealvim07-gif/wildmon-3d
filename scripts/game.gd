@@ -312,7 +312,8 @@ func _build_world() -> void:
 	plane.size = Vector2(400.0, 400.0)
 	ground.mesh = plane
 	var grass := StandardMaterial3D.new()
-	grass.albedo_color = Color(0.30, 0.48, 0.22)
+	grass.albedo_texture = ImageTexture.create_from_image(_make_terrain_albedo(false))
+	grass.albedo_color = Color(0.82, 0.90, 0.76)
 	grass.roughness = 1.0
 	grass.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 	ground.material_override = grass

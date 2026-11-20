@@ -63,12 +63,20 @@ jobs:
           git commit -m "Record imported UAL1 animation names"
           git push
 
-      - name: Launch current world headlessly
+      - name: Launch world and assert protagonist model
         shell: bash
         run: |
           set -euo pipefail
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" --quit-after 12 2>&1 | tee "$RUNNER_TEMP/runtime.log"
           if grep -E "SCRIPT ERROR|Parse Error" "$RUNNER_TEMP/runtime.log"; then
             echo "Runtime validation reported a script or parse error."
+            exit 1
+          fi
+          if grep -F "FALLBACK ANTIGO" "$RUNNER_TEMP/runtime.log"; then
+            echo "Legacy protagonist fallback was used."
+            exit 1
+          fi
+          if ! grep -F "MODELO NOVO CARREGADO" "$RUNNER_TEMP/runtime.log"; then
+            echo "New GLTF protagonist was not confirmed by runtime."
             exit 1
           fi

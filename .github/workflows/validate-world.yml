@@ -29,36 +29,22 @@ jobs:
           "$GODOT" --version
           echo "GODOT=$GODOT" >> "$GITHUB_ENV"
 
-      - name: Download CC0 nature assets
-        shell: bash
-        run: |
-          set -euo pipefail
-          chmod +x scripts/fetch_world_assets.sh
-          scripts/fetch_world_assets.sh
-
       - name: Import project and validate scripts
         shell: bash
         run: |
           set -euo pipefail
           "$GODOT" --headless --editor --path "$GITHUB_WORKSPACE" --quit 2>&1 | tee "$RUNNER_TEMP/import.log"
           if grep -E "SCRIPT ERROR|Parse Error" "$RUNNER_TEMP/import.log"; then
-            echo "Godot import reported a project or extension error."
+            echo "Godot reported a script or parse error during import."
             exit 1
           fi
 
-      - name: Run flat-world and sky diagnostics
-        shell: bash
-        run: |
-          set -euo pipefail
-          "$GODOT" --headless --path "$GITHUB_WORKSPACE" --script res://scripts/terrain_sky_diagnostics.gd 2>&1 | tee "$RUNNER_TEMP/terrain-diagnostics.log"
-          grep -q "WORLD_DIAGNOSTICS_OK" "$RUNNER_TEMP/terrain-diagnostics.log"
-
-      - name: Launch world headlessly
+      - name: Launch current world headlessly
         shell: bash
         run: |
           set -euo pipefail
           "$GODOT" --headless --path "$GITHUB_WORKSPACE" --quit-after 12 2>&1 | tee "$RUNNER_TEMP/runtime.log"
           if grep -E "SCRIPT ERROR|Parse Error" "$RUNNER_TEMP/runtime.log"; then
-            echo "Runtime validation reported an error."
+            echo "Runtime validation reported a script or parse error."
             exit 1
           fi

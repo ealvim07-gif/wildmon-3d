@@ -4,7 +4,9 @@ const CHUNK_SIZE := 32.0
 const CHUNKS := 8
 const CELLS := 24
 const FLAT_RADIUS := 80.0
-const WATER_LEVEL := -1.25
+const WATER_LEVEL := -1.35
+const LAKE_CENTER := Vector2(112.0, 0.0)
+const LAKE_RADIUS := 19.0
 var height_noise := FastNoiseLite.new()
 var lake_noise := FastNoiseLite.new()
 var grass_texture: ImageTexture
@@ -28,11 +30,16 @@ func height_at(x: float, z: float) -> float:
 		return 0.0
 	# Fade suave na borda da planicie, para evitar degrau.
 	var fade := smoothstep(FLAT_RADIUS, FLAT_RADIUS + 22.0, p.length())
-	var hills := height_noise.get_noise_2d(x,z) * 5.0
-	# Bacias suaves e deterministicas, afastadas do spawn.
+	var hills := height_noise.get_noise_2d(x,z) * 4.0
+	# Lago predeterminado e encontravel a ~112 m, com bordas suavizadas.
+	var lake_distance := p.distance_to(LAKE_CENTER)
+	var lake_basin := -3.0 * (1.0 - smoothstep(LAKE_RADIUS - 4.0, LAKE_RADIUS + 8.0, lake_distance))
+	# Colinas suaves perto do lago, sem paredes nem recortes abruptos.
+	var hill_a := 3.8 * exp(-p.distance_to(Vector2(132.0, 24.0)) / 24.0) * exp(-p.distance_to(Vector2(132.0,24.0)) / 24.0)
+	var hill_b := 3.5 * exp(-p.distance_to(Vector2(94.0,-32.0)) / 23.0) * exp(-p.distance_to(Vector2(94.0,-32.0)) / 23.0)
 	var basin_mask := smoothstep(0.50, 0.68, lake_noise.get_noise_2d(x,z))
-	var basin := -3.2 * basin_mask
-	return (hills + basin) * fade
+	var basin := -0.8 * basin_mask
+	return (hills + basin + hill_a + hill_b + lake_basin) * fade
 
 func _make_grass_texture() -> Image:
 	var image := Image.create(256,256,false,Image.FORMAT_RGBA8)
@@ -72,10 +79,15 @@ func _build_chunk(ox:float,oz:float) -> void:
 			var b:=Vector3(x1,height_at(x1,z0),z0)
 			var c:=Vector3(x0,height_at(x0,z1),z1)
 			var d:=Vector3(x1,height_at(x1,z1),z1)
-			# Ordem consistente: triangulos com faces voltadas para cima.
-			st.add_vertex(a); st.add_vertex(c); st.add_vertex(b)
-			st.add_vertex(b); st.add_vertex(c); st.add_vertex(d)
-	st.generate_normals()
+			# UVs em coordenadas de mundo: textura repetida aproximadamente a cada 4 m.
+			# Normais calculadas pelo gradiente para evitar faces escuras/facetadas.
+			st.set_uv(Vector2(x0 / 4.0, z0 / 4.0)); st.set_normal(_terrain_normal(x0,z0)); st.add_vertex(a)
+			st.set_uv(Vector2(x0 / 4.0, z1 / 4.0)); st.set_normal(_terrain_normal(x0,z1)); st.add_vertex(c)
+			st.set_uv(Vector2(x1 / 4.0, z0 / 4.0)); st.set_normal(_terrain_normal(x1,z0)); st.add_vertex(b)
+			st.set_uv(Vector2(x1 / 4.0, z0 / 4.0)); st.set_normal(_terrain_normal(x1,z0)); st.add_vertex(b)
+			st.set_uv(Vector2(x0 / 4.0, z1 / 4.0)); st.set_normal(_terrain_normal(x0,z1)); st.add_vertex(c)
+			st.set_uv(Vector2(x1 / 4.0, z1 / 4.0)); st.set_normal(_terrain_normal(x1,z1)); st.add_vertex(d)
+	var mesh:=st.commit()
 	var mesh:=st.commit()
 	var ground:=MeshInstance3D.new()
 	ground.mesh=mesh
@@ -83,7 +95,9 @@ func _build_chunk(ox:float,oz:float) -> void:
 	mat.albedo_texture=grass_texture
 	mat.roughness=1.0
 	mat.texture_filter=BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	mat.uv1_scale=Vector3(8.0,8.0,1.0)
+	mat.uv1_scale=Vector3(1.0,1.0,1.0)
+	mat.albedo_color=Color(1.0,1.0,1.0)
+	mat.shading_mode=BaseMaterial3D.SHADING_MODE_PER_PIXEL
 	ground.material_override=mat
 	add_child(ground)
 	var body:=StaticBody3D.new()
@@ -103,7 +117,8 @@ func _build_water_chunk(ox:float,oz:float) -> void:
 			var x1:=x0+CHUNK_SIZE/CELLS
 			var z1:=z0+CHUNK_SIZE/CELLS
 			var mid:=Vector2((x0+x1)*0.5,(z0+z1)*0.5)
-			if mid.length()<=FLAT_RADIUS+12.0 or height_at(mid.x,mid.y)>=WATER_LEVEL-0.08:
+			var in_forced_lake := mid.distance_to(LAKE_CENTER) <= LAKE_RADIUS
+			if mid.length()<=FLAT_RADIUS+12.0 or (not in_forced_lake and height_at(mid.x,mid.y)>=WATER_LEVEL-0.08):
 				continue
 			# Face superior, plano de agua em celulas de bacia abaixo do nivel.
 			st.add_vertex(Vector3(x0,WATER_LEVEL,z0))

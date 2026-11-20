@@ -1062,6 +1062,7 @@ func _build_player() -> void:
 	player.safe_margin = 0.04
 
 	player_model = Node3D.new()
+	player_model.rotation.y = PI # Ajuste visual de 180°: o modelo original aponta para +Z.
 	player.add_child(player_model)
 
 	# Explorador estilizado: silhueta legível, roupas em camadas e acessórios.

@@ -770,105 +770,90 @@ func _build_waterhole() -> void:
 		_add_reed(Vector3(reed_x, _terrain_height(reed_x, reed_z) + 0.03, reed_z), 410 + i)
 
 func _build_terrain() -> void:
-	# Malha de terreno explícita: a superfície visível e a colisão são geradas
-	# dos mesmos vértices, evitando divergência de altura entre render e física.
-	var segments := 176
-	var world_size := 132.0
-	var step := world_size / float(segments)
-	var half_size := world_size * 0.5
-	var surface := SurfaceTool.new()
-	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var terrain_noise := FastNoiseLite.new()
-	terrain_noise.seed = 41827
-	terrain_noise.frequency = 0.12
-	for z in range(segments + 1):
-		for x in range(segments + 1):
-			var world_x := -half_size + float(x) * step
-			var world_z := -half_size + float(z) * step
-			var height := _terrain_height(world_x, world_z)
-			var color := _terrain_vertex_color(world_x, world_z, height, terrain_noise)
-			var p00 := Vector3(world_x, height, world_z)
-			if x < segments and z < segments:
-				var p10 := Vector3(world_x + step, _terrain_height(world_x + step, world_z), world_z)
-				var p01 := Vector3(world_x, _terrain_height(world_x, world_z + step), world_z + step)
-				var p11 := Vector3(world_x + step, _terrain_height(world_x + step, world_z + step), world_z + step)
-				var c10 := _terrain_vertex_color(p10.x, p10.z, p10.y, terrain_noise)
-				var c01 := _terrain_vertex_color(p01.x, p01.z, p01.y, terrain_noise)
-				var c11 := _terrain_vertex_color(p11.x, p11.z, p11.y, terrain_noise)
-				# Ordem anti-horária vista de cima: normais apontam para +Y.
-				surface.set_normal(_terrain_normal(p00.x, p00.z))
-				surface.set_color(color)
-				surface.set_uv(Vector2(p00.x, p00.z))
-				surface.add_vertex(p00)
-				surface.set_normal(_terrain_normal(p01.x, p01.z))
-				surface.set_color(c01)
-				surface.set_uv(Vector2(p01.x, p01.z))
-				surface.add_vertex(p01)
-				surface.set_normal(_terrain_normal(p10.x, p10.z))
-				surface.set_color(c10)
-				surface.set_uv(Vector2(p10.x, p10.z))
-				surface.add_vertex(p10)
-				surface.set_normal(_terrain_normal(p10.x, p10.z))
-				surface.set_color(c10)
-				surface.set_uv(Vector2(p10.x, p10.z))
-				surface.add_vertex(p10)
-				surface.set_normal(_terrain_normal(p01.x, p01.z))
-				surface.set_color(c01)
-				surface.set_uv(Vector2(p01.x, p01.z))
-				surface.add_vertex(p01)
-				surface.set_normal(_terrain_normal(p11.x, p11.z))
-				surface.set_color(c11)
-				surface.set_uv(Vector2(p11.x, p11.z))
-				surface.add_vertex(p11)
-	var terrain_mesh := MeshInstance3D.new()
-	terrain_mesh.name = "GroundSurface"
-	terrain_mesh.mesh = surface.commit()
-	var terrain_material := StandardMaterial3D.new()
-	terrain_material.vertex_color_use_as_albedo = true
-	terrain_material.roughness = 1.0
-	# A face superior é a única visível; evita enxergar a parte inferior do mapa.
-	terrain_material.cull_mode = BaseMaterial3D.CULL_BACK
-	# Ruído fino repetido no chão quebra a aparência lisa sem exigir shaders pesados.
-	var ground_image := Image.create(128, 128, false, Image.FORMAT_RGBA8)
-	var ground_noise := FastNoiseLite.new()
-	ground_noise.seed = 7821
-	ground_noise.frequency = 0.095
-	for tex_y in range(128):
-		for tex_x in range(128):
-			var grain := 0.92 + ground_noise.get_noise_2d(float(tex_x), float(tex_y)) * 0.075
-			ground_image.set_pixel(tex_x, tex_y, Color(grain * 0.96, grain, grain * 0.90, 1.0))
-	ground_image.generate_mipmaps()
-	terrain_material.albedo_texture = ImageTexture.create_from_image(ground_image)
-	terrain_material.uv1_scale = Vector3(0.18, 0.18, 1.0)
-	terrain_mesh.material_override = terrain_material
-	add_child(terrain_mesh)
+	# O terreno principal agora é gerado pelo Terrain3D (GDExtension),
+	# usando uma região real 256x256 com heightmap de 32 bits.
+	if not ClassDB.class_exists("Terrain3D"):
+		push_error("Terrain3D GDExtension não foi carregada; não é seguro exportar.")
+		return
 
-	# A colisão é criada diretamente da malha renderizada. Assim, não há
-	# diferenças de origem, escala, orientação ou amostragem entre chão e física.
-	# ConcavePolygonShape3D é apropriada para uma superfície estática de terreno.
-	var terrain_body := StaticBody3D.new()
-	terrain_body.name = "TerrainCollision"
-	terrain_body.collision_layer = 1
-	terrain_body.collision_mask = 1
-	var terrain_collision := CollisionShape3D.new()
-	terrain_collision.name = "TerrainMeshCollision"
-	# Gera a colisão a partir dos mesmos triângulos da malha visual, mas
-	# inverte a ordem dos vértices: o backend de física do Godot interpreta
-	# a face frontal da malha côncava no sentido oposto ao usado pelo SurfaceTool.
-	# Isso evita que os raios e o CharacterBody atravessem o chão e atinjam
-	# somente o piso de segurança que fica muito abaixo do mapa.
-	var collision_arrays := terrain_mesh.mesh.surface_get_arrays(0)
-	var render_vertices: PackedVector3Array = collision_arrays[Mesh.ARRAY_VERTEX]
-	var collision_faces := PackedVector3Array()
-	for triangle_index in range(0, render_vertices.size(), 3):
-		collision_faces.append(render_vertices[triangle_index])
-		collision_faces.append(render_vertices[triangle_index + 2])
-		collision_faces.append(render_vertices[triangle_index + 1])
-	var terrain_shape := ConcavePolygonShape3D.new()
-	terrain_shape.set_faces(collision_faces)
-	terrain_collision.shape = terrain_shape
-	terrain_body.add_child(terrain_collision)
-	add_child(terrain_body)
+	var terrain = ClassDB.instantiate("Terrain3D")
+	terrain.name = "Terrain3D"
+	terrain.set("region_size", 256)
+	terrain.set("vertex_spacing", 1.0)
+	terrain.position = Vector3(-128.0, 0.0, -128.0)
+	terrain.set("data_directory", "user://wildmon_terrain")
+	add_child(terrain)
+
+	var data = terrain.get("data")
+	if data == null:
+		push_error("Terrain3D não inicializou Terrain3DData.")
+		return
+
+	var region = data.add_region_blank(Vector2i.ZERO, false)
+	if region == null:
+		push_error("Terrain3D não conseguiu criar a região principal.")
+		return
+
+	var height_map := Image.create(256, 256, false, Image.FORMAT_RF)
+	var control_map := Image.create(256, 256, false, Image.FORMAT_RF)
+	var color_map := Image.create(256, 256, false, Image.FORMAT_RGBA8)
+	for z in range(256):
+		for x in range(256):
+			var world_x := float(x) - 128.0
+			var world_z := float(z) - 128.0
+			height_map.set_pixel(x, z, Color(_terrain_height(world_x, world_z), 0.0, 0.0, 1.0))
+			control_map.set_pixel(x, z, Color(0.0, 0.0, 0.0, 0.0))
+			color_map.set_pixel(x, z, Color.WHITE)
+	region.set_map(0, height_map)
+	region.set_map(1, control_map)
+	region.set_map(2, color_map)
+	region.calc_height_range()
+	data.calc_height_range()
+	data.update_maps()
+
+	# Texturas tileáveis geradas para o Terrain3D: grama de altitude e rocha.
+	var assets = ClassDB.instantiate("Terrain3DAssets")
+	var grass_asset = ClassDB.instantiate("Terrain3DTextureAsset")
+	grass_asset.set("name", "Grama alpina")
+	grass_asset.set("albedo_texture", ImageTexture.create_from_image(_make_terrain_albedo(false)))
+	grass_asset.set("uv_scale", 0.18)
+	var rock_asset = ClassDB.instantiate("Terrain3DTextureAsset")
+	rock_asset.set("name", "Rocha exposta")
+	rock_asset.set("albedo_texture", ImageTexture.create_from_image(_make_terrain_albedo(true)))
+	rock_asset.set("uv_scale", 0.12)
+	assets.set("texture_list", [grass_asset, rock_asset])
+	terrain.set("assets", assets)
+
+	var terrain_material = ClassDB.instantiate("Terrain3DMaterial")
+	terrain_material.set("auto_shader", true)
+	terrain_material.set("dual_scaling", true)
+	terrain.set("material", terrain_material)
+	terrain.set("collision_mask", 1)
+	terrain.set("mesh_lods", 5)
+	terrain.set("mesh_size", 24)
+	print("WILDMON_TERRAIN3D_READY regions=", data.get_region_count(), " height_range=", data.get_height_range())
+
+func _make_terrain_albedo(rock: bool) -> Image:
+	var image := Image.create(128, 128, false, Image.FORMAT_RGBA8)
+	var noise := FastNoiseLite.new()
+	noise.seed = 551 if rock else 418
+	noise.frequency = 0.075 if rock else 0.11
+	var detail := FastNoiseLite.new()
+	detail.seed = 991 if rock else 733
+	detail.frequency = 0.42
+	for y in range(128):
+		for x in range(128):
+			var broad := noise.get_noise_2d(float(x), float(y))
+			var fine := detail.get_noise_2d(float(x), float(y))
+			var grain := broad * 0.11 + fine * 0.045
+			var color: Color
+			if rock:
+				color = Color(0.43, 0.42, 0.38).lerp(Color(0.68, 0.65, 0.58), clampf(0.5 + grain * 2.8, 0.0, 1.0))
+			else:
+				color = Color(0.19, 0.29, 0.12).lerp(Color(0.43, 0.49, 0.25), clampf(0.5 + grain * 3.2, 0.0, 1.0))
+			image.set_pixel(x, y, Color(color.r, color.g, color.b, 1.0))
+	image.generate_mipmaps()
+	return image
 
 func _terrain_normal(x: float, z: float) -> Vector3:
 	# Normal calculada pelo gradiente do relevo; evita depender da orientação

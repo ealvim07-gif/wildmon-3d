@@ -79,6 +79,8 @@ const MOVE_SPEED := 5.2
 const MOVE_ACCEL := 17.0
 const MOVE_DECEL := 22.0
 const TURN_SPEED := 8.0
+# Reativar quando a captura e a coleção estiverem prontas.
+const SHOW_CREATURE_UI := false
 const CAMERA_DISTANCE := 5.2
 const CAMERA_MIN_CLEARANCE := 2.2
 
@@ -1203,8 +1205,10 @@ func _update_protagonist_animation(speed: float, _delta: float) -> void:
 		_update_protagonist_diagnostic()
 
 func _update_protagonist_diagnostic() -> void:
+	var diagnostic := "MODELO: NOVO | ANIM: " + current_protagonist_animation + " | TRACKS OK: " + str(protagonist_tracks_ok) + "/" + str(protagonist_tracks_total) + " | TRACK: " + protagonist_first_track
+	print(diagnostic)
 	if protagonist_diagnostic_label:
-		protagonist_diagnostic_label.text = "MODELO: NOVO | ANIM: " + current_protagonist_animation + " | TRACKS OK: " + str(protagonist_tracks_ok) + "/" + str(protagonist_tracks_total) + " | TRACK: " + protagonist_first_track
+		protagonist_diagnostic_label.text = diagnostic
 
 func _build_player_fallback() -> void:
 	player = CharacterBody3D.new()
@@ -1501,6 +1505,7 @@ func _build_ui() -> void:
 	diagnostic_label.offset_right = 320.0
 	diagnostic_label.offset_bottom = 188.0
 	diagnostic_label.add_theme_font_size_override("font_size", 16)
+	diagnostic_label.visible = false
 	diagnostic_layer.add_child(diagnostic_label)
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -1542,6 +1547,7 @@ func _build_ui() -> void:
 	collection_label.add_theme_font_size_override("font_size", 12)
 	collection_label.add_theme_color_override("font_color", Color(1.0, 0.78, 0.42))
 	collection_label.text = "COLEÇÃO: 0 BRASAFOFO • 0 PEDRALUME"
+	collection_label.visible = SHOW_CREATURE_UI
 	vbox.add_child(collection_label)
 	variant_label = Label.new()
 	variant_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1589,6 +1595,7 @@ func _build_ui() -> void:
 	capture_button.add_theme_stylebox_override("pressed", capture_pressed)
 	capture_button.add_theme_color_override("font_color", Color(1.0, 0.96, 0.87))
 	capture_button.pressed.connect(_try_capture)
+	capture_button.visible = SHOW_CREATURE_UI
 	layer.add_child(capture_button)
 
 func _make_button(text_value: String) -> Button:

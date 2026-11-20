@@ -124,13 +124,8 @@ var sun_node: DirectionalLight3D
 var weather_strength := 0.0
 
 func _ready() -> void:
-	_build_world()
-	_build_player()
-	await get_tree().physics_frame
-	await _snap_player_to_terrain()
-	_build_ui()
+	# Etapa 2: inicia somente a interface leve; o mundo é criado após o toque.
 	_build_start_menu()
-	_update_status("Exploração livre — beta de ambiente")
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
@@ -1347,14 +1342,19 @@ func _build_start_menu() -> void:
 	box.add_child(footer)
 
 func _start_game() -> void:
+	if started:
+		return
+	# Constrói o mundo atual somente após pressionar Iniciar, sem alterar terreno,
+	# iluminação ou personagem.
+	_build_world()
+	_build_player()
+	await get_tree().physics_frame
+	await _snap_player_to_terrain()
+	_build_ui()
 	started = true
+	_update_status("Explore a planície inicial.")
 	if start_menu:
 		start_menu.queue_free()
-	movement_stick.visible = true
-	capture_button.visible = false
-	collection_label.visible = false
-	variant_label.visible = false
-	_update_status("Explore a planície inicial.")
 
 func _update_day_cycle() -> void:
 	if sun_node == null:

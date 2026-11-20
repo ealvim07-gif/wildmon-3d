@@ -84,8 +84,8 @@ const CAMERA_MIN_CLEARANCE := 2.2
 
 var player: CharacterBody3D
 var player_model: Node3D
-var player_arm_parts: Array[MeshInstance3D] = []
-var player_leg_parts: Array[MeshInstance3D] = []
+var player_arm_parts: Array[Node3D] = []
+var player_leg_parts: Array[Node3D] = []
 var camera: Camera3D
 var creature: Node3D
 var creature_tail: Node3D
@@ -300,8 +300,8 @@ func _build_world() -> void:
 	sun.light_energy = 1.35
 	sun.light_color = Color(1.0, 0.97, 0.90)
 	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 52.0
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	sun.directional_shadow_max_distance = 32.0
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 	add_child(sun)
 
 	_build_terrain()
@@ -1580,8 +1580,11 @@ func _add_sphere_part(parent: Node3D, pos: Vector3, size: Vector3, color: Color)
 	part.material_override = _mat(color)
 	parent.add_child(part)
 
-func _add_limb_part(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> MeshInstance3D:
-	# Membros com seção hexagonal e leve afunilamento: silhueta mais firme e menos arredondada.
+func _add_limb_part(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -> Node3D:
+	# Pivô no ombro/quadril: os membros giram a partir da articulação, não do centro.
+	var pivot := Node3D.new()
+	pivot.position = pos + Vector3(0.0, size.y * 0.5, 0.0)
+	parent.add_child(pivot)
 	var part := MeshInstance3D.new()
 	var mesh := CylinderMesh.new()
 	var radius := minf(size.x, size.z) * 0.5
@@ -1591,10 +1594,10 @@ func _add_limb_part(parent: Node3D, pos: Vector3, size: Vector3, color: Color) -
 	mesh.radial_segments = 6
 	mesh.rings = 1
 	part.mesh = mesh
-	part.position = pos
+	part.position.y = -size.y * 0.5
 	part.material_override = _mat(color)
-	parent.add_child(part)
-	return part
+	pivot.add_child(part)
+	return pivot
 
 func _mat(color: Color) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()

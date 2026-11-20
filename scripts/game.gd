@@ -318,7 +318,6 @@ func _build_world() -> void:
 	grass.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	# Repetição UV: evita que uma textura minúscula fique esticada sobre 400 m.
 	grass.uv1_scale = Vector3(48.0, 48.0, 1.0)
-	grass.material_mode = StandardMaterial3D.MATERIAL_MODE_SPATIAL
 	ground.material_override = grass
 	add_child(ground)
 

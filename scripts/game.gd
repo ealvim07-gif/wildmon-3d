@@ -260,8 +260,8 @@ func _build_world() -> void:
 	env.background_energy_multiplier = 1.0
 	var sky := Sky.new()
 	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.22, 0.48, 0.78)
-	sky_mat.sky_horizon_color = Color(0.68, 0.82, 0.91)
+	sky_mat.sky_top_color = Color(0.08, 0.30, 0.78)
+	sky_mat.sky_horizon_color = Color(0.58, 0.78, 0.96)
 	sky_mat.ground_bottom_color = Color(0.24, 0.34, 0.29)
 	sky_mat.ground_horizon_color = Color(0.48, 0.63, 0.53)
 	sky_mat.sun_angle_max = 24.0
@@ -270,11 +270,11 @@ func _build_world() -> void:
 	sky.sky_material = sky_mat
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_color = Color(0.78, 0.84, 0.91)
-	env.ambient_light_energy = 1.18
+	env.ambient_light_color = Color(0.72, 0.82, 0.96)
+	env.ambient_light_energy = 0.95
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.30
-	env.fog_enabled = true
+	env.tonemap_exposure = 1.0
+	env.fog_enabled = false
 	env.fog_light_color = Color(0.72, 0.82, 0.86)
 	env.fog_density = 0.00018
 	env.fog_sky_affect = 0.0
@@ -285,8 +285,8 @@ func _build_world() -> void:
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-42, -32, 0)
-	sun.light_energy = 1.65
-	sun.light_color = Color(1.0, 0.91, 0.78)
+	sun.light_energy = 1.35
+	sun.light_color = Color(1.0, 0.97, 0.90)
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 52.0
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS

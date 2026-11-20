@@ -110,6 +110,24 @@ jobs:
             exit 1
           fi
 
+      - name: Assert protagonist files exist before export
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s assets/characters/Superhero_Male_FullBody.gltf
+          test -s assets/characters/Superhero_Male_FullBody.bin
+          test -s assets/characters/UAL1_Standard.glb
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          gltf = json.loads(Path("assets/characters/Superhero_Male_FullBody.gltf").read_text(encoding="utf-8"))
+          for image in gltf.get("images", []):
+              uri = image.get("uri", "")
+              if uri and not Path("assets/characters", uri).is_file():
+                  raise SystemExit(f"GLTF texture missing: {uri}")
+          print("GLTF, BIN, animation GLB and referenced textures present.")
+          PY
+
       - name: Validate project scripts and resources
         shell: bash
         run: |
@@ -183,6 +201,9 @@ jobs:
           "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$APK" | tee "$RUNNER_TEMP/apk-badging.txt"
           grep -F "package: name='com.wildmon.game'" "$RUNNER_TEMP/apk-badging.txt"
           grep -F "application-label:'Wildmon 3D'" "$RUNNER_TEMP/apk-badging.txt"
+          # Confirm APK archive includes Godot's embedded project pack.
+          unzip -l "$APK" | tee "$RUNNER_TEMP/apk-contents.txt"
+          grep -E -i "\\.pck$|project\\.pck" "$RUNNER_TEMP/apk-contents.txt"
           sha256sum "$APK"
           ls -lh "$APK"
 

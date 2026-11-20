@@ -33,7 +33,7 @@ func _run_tests() -> void:
 	for x in SAMPLE_COORDS:
 		for z in SAMPLE_COORDS:
 			var expected: float = game.call("_terrain_height", x, z)
-			var actual: float = data.get_height(Vector3(x, 0.0, z))
+			var actual: float = data.get_height(Vector3(x + 128.0, 0.0, z + 128.0))
 			if not is_finite(actual) or absf(actual - expected) > 0.35:
 				_fail("Heightmap Terrain3D divergente em (%s,%s): esperado %.2f, obtido %.2f." % [x, z, expected, actual])
 				return

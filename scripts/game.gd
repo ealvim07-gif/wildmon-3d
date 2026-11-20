@@ -84,6 +84,7 @@ const CAMERA_MIN_CLEARANCE := 2.2
 
 var player: CharacterBody3D
 var player_model: Node3D
+var protagonist_model_status := "MODELO: NÃO TESTADO"
 var player_arm_parts: Array[Node3D] = []
 var player_leg_parts: Array[Node3D] = []
 var camera: Camera3D
@@ -1046,16 +1047,26 @@ func _snap_player_to_terrain() -> void:
 		camera.look_at(player.global_position + Vector3(0.0, 1.2, 0.0))
 
 func _build_player() -> void:
-	var model_scene := load("res://assets/characters/Superhero_Male_FullBody.gltf") as PackedScene
+	var model_path := "res://assets/characters/Superhero_Male_FullBody.gltf"
+	if not ResourceLoader.exists(model_path):
+		protagonist_model_status = "MODELO: FALLBACK (arquivo ausente no APK: ResourceLoader.exists)"
+		print("FALLBACK ANTIGO: arquivo ausente no APK (ResourceLoader.exists)")
+		_build_player_fallback()
+		return
+	var model_scene := load(model_path) as PackedScene
 	if model_scene == null:
-		print("FALLBACK ANTIGO")
+		protagonist_model_status = "MODELO: FALLBACK (load() retornou nulo)"
+		print("FALLBACK ANTIGO: load() retornou nulo")
 		_build_player_fallback()
 		return
 	var model_instance := model_scene.instantiate() as Node3D
 	if model_instance == null:
-		print("FALLBACK ANTIGO")
+		protagonist_model_status = "MODELO: FALLBACK (instantiate() falhou)"
+		print("FALLBACK ANTIGO: instantiate() falhou")
 		_build_player_fallback()
 		return
+	protagonist_model_status = "MODELO: NOVO"
+	print("MODELO NOVO CARREGADO")
 	# Instancia explicitamente o protagonista GLTF; nenhum modelo procedural e criado nesse caminho.
 	player = CharacterBody3D.new()
 	player.position = Vector3(-4.0, _terrain_height(-4.0, -42.0) + 0.12, -42.0)
@@ -1367,6 +1378,21 @@ func _update_day_cycle() -> void:
 
 
 func _build_ui() -> void:
+	var diagnostic_layer := CanvasLayer.new()
+	diagnostic_layer.name = "ProtagonistDiagnostic"
+	add_child(diagnostic_layer)
+	var diagnostic_label := Label.new()
+	diagnostic_label.text = protagonist_model_status
+	diagnostic_label.anchor_left = 0.0
+	diagnostic_label.anchor_top = 0.0
+	diagnostic_label.anchor_right = 0.0
+	diagnostic_label.anchor_bottom = 0.0
+	diagnostic_label.offset_left = 12.0
+	diagnostic_label.offset_top = 8.0
+	diagnostic_label.offset_right = 320.0
+	diagnostic_label.offset_bottom = 36.0
+	diagnostic_label.add_theme_font_size_override("font_size", 16)
+	diagnostic_layer.add_child(diagnostic_label)
 	var layer := CanvasLayer.new()
 	add_child(layer)
 

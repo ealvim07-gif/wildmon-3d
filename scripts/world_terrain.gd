@@ -1,6 +1,6 @@
 extends Node3D
 # Terreno por chunks, com textura triplanar e colisao triangulada para Android.
-const DEBUG_TERRAIN_UNSHADED := true # Diagnostico visual temporario deste build.
+const DEBUG_TERRAIN_UNSHADED := false # Diagnostico visual temporario deste build.
 const CHUNK_SIZE := 32.0
 const CHUNKS := 8
 const CELLS := 12 # menos triangulos: carrega ~4x mais rapido no celular

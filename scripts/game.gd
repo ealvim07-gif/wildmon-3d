@@ -334,6 +334,13 @@ func _build_world() -> void:
 		ground_shape.position.y = -0.1
 		ground_body.add_child(ground_shape)
 		add_child(ground_body)
+
+	# Árvores são criadas somente depois do terreno.
+	if USE_NEW_TERRAIN and generated_terrain != null:
+		var trees_script = load("res://scripts/world_trees.gd")
+		if trees_script:
+			trees_script.build(self, generated_terrain)
+
 func _build_biome_ground_cover(rng: RandomNumberGenerator) -> void:
 	# Sub-bosque em manchas: vegetação baixa acompanha as copas, sem cobrir tudo.
 	var forest_centers := [Vector2(-31.0, -29.0), Vector2(31.0, -29.0), Vector2(-34.0, 34.0), Vector2(34.0, 34.0)]
@@ -936,36 +943,17 @@ func _add_grass_tuft(pos: Vector3, seed: int) -> void:
 		add_child(grass)
 
 func _add_tree(pos: Vector3, seed: int) -> void:
-	var tree_scene := _get_nature_scene(["CommonTree_1", "CommonTree_2", "CommonTree_3", "Pine_1", "Pine_2", "TreeHigh001", "TreeHigh002", "TreeHigh003"], seed)
-	if tree_scene:
-		var tree := tree_scene.instantiate() as Node3D
-		_disable_scene_shadows(tree)
-		add_child(tree)
-		_set_scene_visibility_range(tree, 108.0)
-		tree.position = pos
-		var scale_factor := 0.88 + float(seed % 5) * 0.12
-		tree.scale = Vector3.ONE * scale_factor
-		tree.rotation.y = float(seed * 53 % 360) * PI / 180.0
-		var trunk_body := StaticBody3D.new()
-		trunk_body.position = pos + Vector3(0.0, 1.35 * scale_factor, 0.0)
-		add_child(trunk_body)
-		var trunk_collision := CollisionShape3D.new()
-		var trunk_shape := CylinderShape3D.new()
-		trunk_shape.radius = 0.28 * scale_factor
-		trunk_shape.height = 2.7 * scale_factor
-		trunk_collision.shape = trunk_shape
-		trunk_body.add_child(trunk_collision)
+	var tree_scene := _get_nature_scene(["CommonTree_1", "CommonTree_2", "CommonTree_3", "Pine_1", "Pine_2"], seed)
+	if not tree_scene:
 		return
-	# Fallback geométrico para execução local sem os arquivos externos.
-	var trunk := MeshInstance3D.new()
-	var trunk_mesh := CylinderMesh.new()
-	trunk_mesh.top_radius = 0.12
-	trunk_mesh.bottom_radius = 0.25
-	trunk_mesh.height = 3.2
-	trunk.mesh = trunk_mesh
-	trunk.position = pos + Vector3(0, 1.6, 0)
-	trunk.material_override = _mat(Color(0.25, 0.15, 0.085))
-	add_child(trunk)
+	var tree := tree_scene.instantiate() as Node3D
+	_disable_scene_shadows(tree)
+	add_child(tree)
+	_set_scene_visibility_range(tree, 100.0)
+	tree.position = pos
+	var scale_factor := 0.88 + float(seed % 5) * 0.12
+	tree.scale = Vector3.ONE * scale_factor
+	tree.rotation.y = float(seed * 53 % 360) * PI / 180.0
 
 func _get_nature_scene(names: Array, seed: int) -> PackedScene:
 	if names.is_empty():

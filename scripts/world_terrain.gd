@@ -1,30 +1,30 @@
 extends Node3D
-# Terreno por chunks, com textura triplanar e colisao triangulada para Android.
-const DEBUG_TERRAIN_UNSHADED := false # Diagnostico visual temporario deste build.
+# Terreno por chunks, agua do lago e nuvens estilizadas otimizadas para Android.
+const DEBUG_TERRAIN_UNSHADED := false
 const CHUNK_SIZE := 32.0
 const CHUNKS := 8
-const CELLS := 12 # menos triangulos: carrega ~4x mais rapido no celular
+const CELLS := 12
 const FLAT_RADIUS := 80.0
 const WATER_LEVEL := -1.35
 const LAKE_CENTER := Vector2(112.0, 0.0)
 const LAKE_RADIUS := 19.0
-const TEXTURE_SIZE := 256 # tamanho da textura procedural (pixels)
-const TEXTURE_REPEAT_M := 4.0 # a textura se repete a cada 4 m
-# Opcional: foto CC0 (Poly Haven / ambientCG). Se estes arquivos existirem, sao usados no lugar da procedural.
+const TEXTURE_SIZE := 256
+const TEXTURE_REPEAT_M := 3.2
 const GRASS_ALBEDO_PATH := "res://assets/terrain/grass_albedo.jpg"
 const GRASS_NORMAL_PATH := "res://assets/terrain/grass_normal.jpg"
-# --- Estilo pintado (Legends: Arceus). Tudo aqui pode ser ajustado a mao. ---
-const GRASS_DARK := Color(0.24, 0.38, 0.17)
-const GRASS_MID := Color(0.42, 0.57, 0.24)
-const GRASS_LIGHT := Color(0.66, 0.74, 0.38)
-const GRASS_DRY := Color(0.74, 0.68, 0.38)
-const GRASS_DIRT := Color(0.50, 0.40, 0.26)
-const TINT_LOW := Color(0.80, 0.88, 0.68)   # variacao de cor em escala grande (campos mais frios)
-const TINT_HIGH := Color(1.00, 0.98, 0.84)  # (campos mais quentes e amarelados)
-const GROUND_TINT := Color(0.90, 0.92, 0.88) # multiplica toda a cor do chao; abaixe para escurecer
-const FINE_CONTRAST := 0.30    # contraste do grao fino (era 0.55): menor = mais suave e pintado
-const SPECKLE_LIGHT := 0.015   # fracao de pontinhos claros (era 0.035)
-const SPECKLE_DARK := 0.015    # fracao de pontinhos escuros (era 0.04)
+
+# --- Paleta de grama estilizada (Legends: Arceus) ---
+const GRASS_DEEP := Color(0.18, 0.34, 0.13)
+const GRASS_DARK := Color(0.25, 0.44, 0.17)
+const GRASS_MID := Color(0.38, 0.58, 0.23)
+const GRASS_LIGHT := Color(0.58, 0.72, 0.32)
+const GRASS_TIP := Color(0.72, 0.80, 0.40)
+const GRASS_DRY := Color(0.72, 0.65, 0.34)
+const GRASS_DIRT := Color(0.46, 0.36, 0.23)
+const TINT_LOW := Color(0.84, 0.92, 0.74)
+const TINT_HIGH := Color(1.00, 0.97, 0.84)
+const GROUND_TINT := Color(0.95, 0.97, 0.92)
+
 var height_noise := FastNoiseLite.new()
 var lake_noise := FastNoiseLite.new()
 var tint_noise := FastNoiseLite.new()
@@ -58,33 +58,33 @@ func _ready() -> void:
 	lake_noise.frequency = 0.012
 	lake_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
 	tint_noise.seed = 5521
-	tint_noise.frequency = 0.018
+	tint_noise.frequency = 0.016
 	tint_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
 	tint_noise.fractal_octaves = 2
 	_load_grass_textures()
 	_build_chunks()
+	_build_lake()
+	_build_clouds()
 	_diagnose_terrain_cover()
 	_adjust_directional_light_bias()
 
 func height_at(x: float, z: float) -> float:
-	var p := Vector2(x,z)
+	var p := Vector2(x, z)
 	if p.length() <= FLAT_RADIUS:
 		return 0.0
-	# Fade suave na borda da planicie, para evitar degrau.
 	var fade := smoothstep(FLAT_RADIUS, FLAT_RADIUS + 22.0, p.length())
-	var hills := height_noise.get_noise_2d(x,z) * 4.0
-	# Lago predeterminado e encontravel a ~112 m, com bordas suavizadas.
+	var hills := height_noise.get_noise_2d(x, z) * 4.0
 	var lake_distance := p.distance_to(LAKE_CENTER)
 	var lake_basin := -3.0 * (1.0 - smoothstep(LAKE_RADIUS - 4.0, LAKE_RADIUS + 8.0, lake_distance))
-	# Colinas suaves perto do lago, sem paredes nem recortes abruptos.
-	var hill_a := 3.8 * exp(-p.distance_to(Vector2(132.0, 24.0)) / 24.0) * exp(-p.distance_to(Vector2(132.0,24.0)) / 24.0)
-	var hill_b := 3.5 * exp(-p.distance_to(Vector2(94.0,-32.0)) / 23.0) * exp(-p.distance_to(Vector2(94.0,-32.0)) / 23.0)
-	var basin_mask := smoothstep(0.50, 0.68, lake_noise.get_noise_2d(x,z))
+	var d_a := p.distance_to(Vector2(132.0, 24.0)) / 24.0
+	var d_b := p.distance_to(Vector2(94.0, -32.0)) / 23.0
+	var hill_a := 3.8 * exp(-d_a * 2.0)
+	var hill_b := 3.5 * exp(-d_b * 2.0)
+	var basin_mask := smoothstep(0.50, 0.68, lake_noise.get_noise_2d(x, z))
 	var basin := -0.8 * basin_mask
 	return (hills + basin + hill_a + hill_b + lake_basin) * fade
 
 func _load_grass_textures() -> void:
-	# 1) Se existir uma foto CC0 em assets/terrain/, usa ela.
 	if ResourceLoader.exists(GRASS_ALBEDO_PATH):
 		var photo = load(GRASS_ALBEDO_PATH)
 		if photo is Texture2D:
@@ -95,12 +95,10 @@ func _load_grass_textures() -> void:
 					grass_normal = normal_photo
 			print("[TERRAIN] Textura do chao: foto ", GRASS_ALBEDO_PATH)
 			return
-	# 2) Senao, gera a textura procedural melhorada (sem emendas).
 	grass_texture = ImageTexture.create_from_image(_make_grass_texture())
-	print("[TERRAIN] Textura do chao: procedural melhorada")
+	print("[TERRAIN] Textura do chao: grama estilizada com laminas")
 
 func _tint_at(x: float, z: float) -> Color:
-	# Variacao de cor em escala grande (dezenas de metros), para quebrar a repeticao da textura.
 	var u := tint_noise.get_noise_2d(x, z) * 0.5 + 0.5
 	return TINT_LOW.lerp(TINT_HIGH, clampf(u, 0.0, 1.0))
 
@@ -119,63 +117,67 @@ func _seamless_layer(seed_value: int, frequency: float, octaves: int) -> PackedB
 func _make_grass_texture() -> Image:
 	var size := TEXTURE_SIZE
 	var total := size * size
-	var broad := _seamless_layer(418, 0.012, 2)
-	var mid := _seamless_layer(733, 0.045, 3)
-	var fine := _seamless_layer(991, 0.16, 2)
-	if broad.size() != total or mid.size() != total or fine.size() != total:
-		print("[TERRAIN] Textura nova indisponivel, usando a antiga")
+	var broad := _seamless_layer(418, 0.015, 2)
+	var tuft := _seamless_layer(733, 0.055, 3)
+	var blade_noise := _seamless_layer(991, 0.14, 2)
+	if broad.size() != total or tuft.size() != total or blade_noise.size() != total:
 		return _make_grass_texture_legacy()
+
 	var data := PackedByteArray()
 	data.resize(total * 4)
-	var c_dark := GRASS_DARK
-	var c_mid := GRASS_MID
-	var c_light := GRASS_LIGHT
-	var c_dry := GRASS_DRY
-	var c_dirt := GRASS_DIRT
+	var inv_size := TAU / float(size)
+
 	for y in range(size):
+		var fy := float(y) * inv_size
 		for x in range(size):
+			var fx := float(x) * inv_size
 			var i := y * size + x
 			var b := float(broad[i]) / 255.0
-			var m := float(mid[i]) / 255.0
-			var f := float(fine[i]) / 255.0
-			var t := clampf(0.15 + m * 0.65 + (f - 0.5) * FINE_CONTRAST, 0.0, 1.0)
+			var m := float(tuft[i]) / 255.0
+			var n := float(blade_noise[i]) / 255.0
+
+			# Padrao direcional de fios/laminas de grama entrelaçados (sem emendas nas bordas)
+			var swirl := (n - 0.5) * 2.2 + (m - 0.5) * 1.4
+			var strand_a := sin(fx * 18.0 + fy * 4.0 + swirl) * 0.5 + 0.5
+			var strand_b := cos(fx * 7.0 - fy * 16.0 - swirl * 0.8) * 0.5 + 0.5
+			var blades := clampf(strand_a * 0.6 + strand_b * 0.4, 0.0, 1.0)
+
+			var shade := clampf(m * 0.52 + blades * 0.36 + (n - 0.5) * 0.18, 0.0, 1.0)
 			var col: Color
-			if t < 0.5:
-				col = c_dark.lerp(c_mid, t * 2.0)
+			if shade < 0.25:
+				col = GRASS_DEEP.lerp(GRASS_DARK, shade / 0.25)
+			elif shade < 0.55:
+				col = GRASS_DARK.lerp(GRASS_MID, (shade - 0.25) / 0.30)
+			elif shade < 0.82:
+				col = GRASS_MID.lerp(GRASS_LIGHT, (shade - 0.55) / 0.27)
 			else:
-				col = c_mid.lerp(c_light, (t - 0.5) * 2.0)
-			# Manchas de grama seca e pequenos trechos de terra, em escala grande.
-			col = col.lerp(c_dry, smoothstep(0.55, 0.9, b) * 0.55)
-			col = col.lerp(c_dirt, smoothstep(0.78, 0.95, b * 0.6 + f * 0.4) * 0.6)
-			# Pontinhos claros e escuros isolados, parecendo folhas de grama.
-			var h := fposmod(sin(float(x) * 12.9898 + float(y) * 78.233) * 43758.5453, 1.0)
-			if h > 1.0 - SPECKLE_LIGHT:
-				col = col.lightened(0.18)
-			elif h < SPECKLE_DARK:
-				col = col.darkened(0.22)
+				col = GRASS_LIGHT.lerp(GRASS_TIP, (shade - 0.82) / 0.18)
+
+			# Manchas naturais de grama dourada e pequenos trechos de terra
+			col = col.lerp(GRASS_DRY, smoothstep(0.60, 0.90, b) * 0.45)
+			col = col.lerp(GRASS_DIRT, smoothstep(0.82, 0.96, b * 0.65 + (1.0 - blades) * 0.35) * 0.50)
+
 			var j := i * 4
 			data[j] = int(clampf(col.r, 0.0, 1.0) * 255.0)
 			data[j + 1] = int(clampf(col.g, 0.0, 1.0) * 255.0)
 			data[j + 2] = int(clampf(col.b, 0.0, 1.0) * 255.0)
 			data[j + 3] = 255
+
 	var image := Image.create_from_data(size, size, false, Image.FORMAT_RGBA8, data)
 	image.generate_mipmaps()
 	return image
 
 func _make_grass_texture_legacy() -> Image:
-	var image := Image.create(256,256,false,Image.FORMAT_RGBA8)
-	var broad:=FastNoiseLite.new(); broad.seed=418; broad.frequency=0.035
-	var detail:=FastNoiseLite.new(); detail.seed=733; detail.frequency=0.19
-	var grain:=FastNoiseLite.new(); grain.seed=991; grain.frequency=0.62
+	var image := Image.create(256, 256, false, Image.FORMAT_RGBA8)
+	var broad := FastNoiseLite.new(); broad.seed = 418; broad.frequency = 0.035
+	var detail := FastNoiseLite.new(); detail.seed = 733; detail.frequency = 0.19
 	for y in range(256):
 		for x in range(256):
-			var n1:=broad.get_noise_2d(float(x),float(y))
-			var n2:=detail.get_noise_2d(float(x),float(y))
-			var n3:=grain.get_noise_2d(float(x),float(y))
-			var fleck:=sin(float(x)*1.7+n2*8.0)*cos(float(y)*1.3+n3*7.0)*0.035
-			var value:=clampf(0.5+n1*0.25+n2*0.18+n3*0.09+fleck,0.0,1.0)
-			var color:=Color(0.19,0.36,0.11).lerp(Color(0.46,0.61,0.29),value)
-			image.set_pixel(x,y,Color(color.r,color.g,color.b,1.0))
+			var n1 := broad.get_noise_2d(float(x), float(y))
+			var n2 := detail.get_noise_2d(float(x), float(y))
+			var value := clampf(0.5 + n1 * 0.28 + n2 * 0.22, 0.0, 1.0)
+			var color := Color(0.20, 0.38, 0.13).lerp(Color(0.52, 0.68, 0.29), value)
+			image.set_pixel(x, y, Color(color.r, color.g, color.b, 1.0))
 	image.generate_mipmaps()
 	return image
 
@@ -188,50 +190,59 @@ func _terrain_normal(x: float, z: float) -> Vector3:
 func _build_chunks() -> void:
 	for cx in range(CHUNKS):
 		for cz in range(CHUNKS):
-			var ox:float=(float(cx)-CHUNKS*0.5)*CHUNK_SIZE
-			var oz:float=(float(cz)-CHUNKS*0.5)*CHUNK_SIZE
-			_build_chunk(ox,oz)
-			_build_water_chunk(ox,oz)
-	# Pedras de orientação na direção do lago (+X), dentro da área alcançável.
-	_make_marker_rock(18.0, -42.0, Vector3(0.65,0.42,0.58))
-	_make_marker_rock(34.0, -42.0, Vector3(0.9,0.55,0.75))
-	_make_marker_rock(50.0, -42.0, Vector3(1.1,0.7,0.9))
-	_make_marker_rock(56.0, -36.0, Vector3(0.7,0.45,0.65))
+			var ox: float = (float(cx) - CHUNKS * 0.5) * CHUNK_SIZE
+			var oz: float = (float(cz) - CHUNKS * 0.5) * CHUNK_SIZE
+			_build_chunk(ox, oz)
+	# Pedras de orientacao na direcao do lago (+X)
+	_make_marker_rock(18.0, -42.0, Vector3(0.65, 0.42, 0.58))
+	_make_marker_rock(34.0, -42.0, Vector3(0.9, 0.55, 0.75))
+	_make_marker_rock(50.0, -42.0, Vector3(1.1, 0.7, 0.9))
+	_make_marker_rock(56.0, -36.0, Vector3(0.7, 0.45, 0.65))
 
-func _build_chunk(ox:float,oz:float) -> void:
-	var st:=SurfaceTool.new()
+func _build_chunk(ox: float, oz: float) -> void:
+	var stride := CELLS + 1
+	var count := stride * stride
+	var pts := PackedVector3Array()
+	var norms := PackedVector3Array()
+	var tints := PackedColorArray()
+	pts.resize(count)
+	norms.resize(count)
+	tints.resize(count)
+
+	var cell_step := CHUNK_SIZE / float(CELLS)
+	for gz in range(stride):
+		var wz := oz + float(gz) * cell_step
+		for gx in range(stride):
+			var wx := ox + float(gx) * cell_step
+			var idx := gz * stride + gx
+			pts[idx] = Vector3(wx, height_at(wx, wz), wz)
+			norms[idx] = _terrain_normal(wx, wz)
+			tints[idx] = _tint_at(wx, wz)
+
+	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for z in range(CELLS):
 		for x in range(CELLS):
-			var x0:=ox+float(x)*CHUNK_SIZE/CELLS
-			var z0:=oz+float(z)*CHUNK_SIZE/CELLS
-			var x1:=x0+CHUNK_SIZE/CELLS
-			var z1:=z0+CHUNK_SIZE/CELLS
-			var a:=Vector3(x0,height_at(x0,z0),z0)
-			var b:=Vector3(x1,height_at(x1,z0),z0)
-			var c:=Vector3(x0,height_at(x0,z1),z1)
-			var d:=Vector3(x1,height_at(x1,z1),z1)
-			var ta:=_tint_at(x0,z0)
-			var tb:=_tint_at(x1,z0)
-			var tc:=_tint_at(x0,z1)
-			var td:=_tint_at(x1,z1)
-			# UVs em coordenadas de mundo: textura repetida aproximadamente a cada 4 m.
-			# Normais calculadas pelo gradiente para evitar faces escuras/facetadas.
-			# Ordem horaria vista de cima (frente da face = para cima), exigida pela colisao do Godot.
-			st.set_uv(Vector2(x0 / 4.0, z0 / 4.0)); st.set_color(ta); st.set_normal(_terrain_normal(x0,z0)); st.add_vertex(a)
-			st.set_uv(Vector2(x1 / 4.0, z0 / 4.0)); st.set_color(tb); st.set_normal(_terrain_normal(x1,z0)); st.add_vertex(b)
-			st.set_uv(Vector2(x0 / 4.0, z1 / 4.0)); st.set_color(tc); st.set_normal(_terrain_normal(x0,z1)); st.add_vertex(c)
-			st.set_uv(Vector2(x1 / 4.0, z0 / 4.0)); st.set_color(tb); st.set_normal(_terrain_normal(x1,z0)); st.add_vertex(b)
-			st.set_uv(Vector2(x1 / 4.0, z1 / 4.0)); st.set_color(td); st.set_normal(_terrain_normal(x1,z1)); st.add_vertex(d)
-			st.set_uv(Vector2(x0 / 4.0, z1 / 4.0)); st.set_color(tc); st.set_normal(_terrain_normal(x0,z1)); st.add_vertex(c)
-	var mesh:=st.commit()
-	var ground:=MeshInstance3D.new()
-	ground.mesh=mesh
+			var i00 := z * stride + x
+			var i10 := i00 + 1
+			var i01 := (z + 1) * stride + x
+			var i11 := i01 + 1
+
+			st.set_color(tints[i00]); st.set_normal(norms[i00]); st.add_vertex(pts[i00])
+			st.set_color(tints[i10]); st.set_normal(norms[i10]); st.add_vertex(pts[i10])
+			st.set_color(tints[i01]); st.set_normal(norms[i01]); st.add_vertex(pts[i01])
+
+			st.set_color(tints[i10]); st.set_normal(norms[i10]); st.add_vertex(pts[i10])
+			st.set_color(tints[i11]); st.set_normal(norms[i11]); st.add_vertex(pts[i11])
+			st.set_color(tints[i01]); st.set_normal(norms[i01]); st.add_vertex(pts[i01])
+
+	var mesh := st.commit()
+	var ground := MeshInstance3D.new()
+	ground.mesh = mesh
 	ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var mat:=StandardMaterial3D.new()
-	mat.albedo_texture=grass_texture
-	mat.roughness=1.0
-	mat.texture_filter=BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = grass_texture
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	mat.vertex_color_use_as_albedo = true
 	mat.uv1_triplanar = true
 	mat.uv1_world_triplanar = true
@@ -239,26 +250,92 @@ func _build_chunk(ox:float,oz:float) -> void:
 	if grass_normal != null:
 		mat.normal_enabled = true
 		mat.normal_texture = grass_normal
-	mat.albedo_color=GROUND_TINT
+	mat.albedo_color = GROUND_TINT
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mat.roughness=1.0
-	mat.metallic=0.0
+	mat.roughness = 0.96
+	mat.metallic = 0.0
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED if DEBUG_TERRAIN_UNSHADED else BaseMaterial3D.SHADING_MODE_PER_PIXEL
-	mat.disable_receive_shadows=false
-	ground.material_override=mat
+	mat.disable_receive_shadows = false
+	ground.material_override = mat
 	add_child(ground)
-	var body:=StaticBody3D.new()
-	var cs:=CollisionShape3D.new()
+
+	var body := StaticBody3D.new()
+	var cs := CollisionShape3D.new()
 	var trimesh := mesh.create_trimesh_shape()
-	trimesh.backface_collision = true # o jogador nunca atravessa o chao, mesmo se a ordem das faces falhar
-	cs.shape=trimesh
+	trimesh.backface_collision = true
+	cs.shape = trimesh
 	body.add_child(cs)
 	add_child(body)
 
+func _build_clouds() -> void:
+	# Camada de nuvens estilizadas altas e leves, movendo-se suavemente com o vento.
+	var sky_clouds := MeshInstance3D.new()
+	sky_clouds.name = "StylizedClouds"
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(560.0, 560.0)
+	plane.subdivide_width = 8
+	plane.subdivide_depth = 8
+	sky_clouds.mesh = plane
+	sky_clouds.position = Vector3(0.0, 68.0, 0.0)
+	sky_clouds.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+	var sm := ShaderMaterial.new()
+	var shader := Shader.new()
+	shader.code = """
+shader_type spatial;
+render_mode blend_mix, depth_draw_never, cull_disabled, unshaded;
+
+float hash(vec2 p) {
+	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+
+float noise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	vec2 u = f * f * (3.0 - 2.0 * f);
+	return mix(
+		mix(hash(i + vec2(0.0, 0.0)), hash(i + vec2(1.0, 0.0)), u.x),
+		mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
+		u.y
+	);
+}
+
+float fbm(vec2 p) {
+	float v = 0.0;
+	float a = 0.5;
+	for (int i = 0; i < 4; i++) {
+		v += a * noise(p);
+		p *= 2.03;
+		a *= 0.5;
+	}
+	return v;
+}
+
+void fragment() {
+	vec2 centered = UV - vec2(0.5);
+	float dist = length(centered) * 2.0;
+	float horizon_fade = 1.0 - smoothstep(0.58, 0.98, dist);
+
+	vec2 wind = vec2(TIME * 0.0045, TIME * 0.0022);
+	vec2 p = UV * 9.5 + wind;
+	float n = fbm(p);
+	float detail = fbm(p * 2.2 - wind * 1.6);
+	float cloud = smoothstep(0.48, 0.76, n * 0.78 + detail * 0.22);
+
+	vec3 shadow_tint = vec3(0.82, 0.89, 0.97);
+	vec3 bright_tint = vec3(1.00, 0.99, 0.96);
+	float light = smoothstep(0.45, 0.82, n);
+	ALBEDO = mix(shadow_tint, bright_tint, light);
+	ALPHA = cloud * horizon_fade * 0.88;
+}
+"""
+	sm.shader = shader
+	sky_clouds.material_override = sm
+	add_child(sky_clouds)
+
 func _diagnose_terrain_cover() -> void:
 	print("[TERRAIN DEBUG] DEBUG_TERRAIN_UNSHADED=", DEBUG_TERRAIN_UNSHADED)
-	print("[TERRAIN DEBUG] Planicie: material StandardMaterial3D triplanar com grama procedural.")
-	print("[TERRAIN DEBUG] Normais calculadas por gradiente; planicie deve ter Vector3.UP.")
+	print("[TERRAIN DEBUG] Planicie: grama estilizada com laminas + lago continuo + nuvens.")
 	var found_cover := false
 	var root := get_parent()
 	if root:
@@ -266,10 +343,8 @@ func _diagnose_terrain_cover() -> void:
 			if node == self:
 				continue
 			if node is MeshInstance3D and node.global_position.y >= -0.5 and node.global_position.y <= 0.5:
-				print("[TERRAIN DEBUG] Outra MeshInstance3D vizinha: ", node.name, " pos=", node.global_position)
 				found_cover = true
 			if node is Node3D and node.name.to_lower().contains("plane"):
-				print("[TERRAIN DEBUG] Possivel plano cobrindo area: ", node.name)
 				found_cover = true
 	print("[TERRAIN DEBUG] Outra malha/plano detectado na faixa de altura da planicie: ", found_cover)
 
@@ -279,7 +354,6 @@ func _adjust_directional_light_bias() -> void:
 		for light in _find_directional_lights(root):
 			light.shadow_bias = maxf(light.shadow_bias, 0.08)
 			light.shadow_normal_bias = maxf(light.shadow_normal_bias, 1.0)
-			print("[TERRAIN DEBUG] DirectionalLight3D ", light.name, " bias=", light.shadow_bias, " normal_bias=", light.shadow_normal_bias)
 
 func _find_directional_lights(node: Node) -> Array:
 	var found: Array = []
@@ -289,36 +363,79 @@ func _find_directional_lights(node: Node) -> Array:
 		found.append_array(_find_directional_lights(child))
 	return found
 
-func _build_water_chunk(ox:float,oz:float) -> void:
-	var st:=SurfaceTool.new()
+func _build_lake() -> void:
+	var lake_span := LAKE_RADIUS + 10.0
+	var grid := 28
+	var step := (lake_span * 2.0) / float(grid)
+	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var has_water:=false
-	for z in range(CELLS):
-		for x in range(CELLS):
-			var x0:=ox+float(x)*CHUNK_SIZE/CELLS
-			var z0:=oz+float(z)*CHUNK_SIZE/CELLS
-			var x1:=x0+CHUNK_SIZE/CELLS
-			var z1:=z0+CHUNK_SIZE/CELLS
-			var mid:=Vector2((x0+x1)*0.5,(z0+z1)*0.5)
-			var in_forced_lake := mid.distance_to(LAKE_CENTER) <= LAKE_RADIUS
-			if mid.length()<=FLAT_RADIUS+12.0 or (not in_forced_lake and height_at(mid.x,mid.y)>=WATER_LEVEL-0.08):
-				continue
-			# Face superior, plano de agua em celulas de bacia abaixo do nivel.
-			st.add_vertex(Vector3(x0,WATER_LEVEL,z0))
-			st.add_vertex(Vector3(x0,WATER_LEVEL,z1))
-			st.add_vertex(Vector3(x1,WATER_LEVEL,z0))
-			st.add_vertex(Vector3(x1,WATER_LEVEL,z0))
-			st.add_vertex(Vector3(x0,WATER_LEVEL,z1))
-			st.add_vertex(Vector3(x1,WATER_LEVEL,z1))
-			has_water=true
-	if not has_water:
-		return
-	st.generate_normals()
-	var water:=MeshInstance3D.new()
-	water.mesh=st.commit()
-	var sm:=ShaderMaterial.new()
-	var shader:=Shader.new()
-	shader.code="shader_type spatial; render_mode unshaded, cull_disabled; void fragment(){float r=sin(UV.x*32.0+TIME*0.7)*sin(UV.y*24.0+TIME*0.45); ALBEDO=vec3(0.08,0.28,0.36)+r*0.015;}"
-	sm.shader=shader
-	water.material_override=sm
+
+	for gz in range(grid):
+		for gx in range(grid):
+			var x0 := LAKE_CENTER.x - lake_span + float(gx) * step
+			var z0 := LAKE_CENTER.y - lake_span + float(gz) * step
+			var x1 := x0 + step
+			var z1 := z0 + step
+
+			var c00 := _water_vertex_color(x0, z0)
+			var c10 := _water_vertex_color(x1, z0)
+			var c01 := _water_vertex_color(x0, z1)
+			var c11 := _water_vertex_color(x1, z1)
+
+			var v00 := Vector3(x0, WATER_LEVEL, z0)
+			var v10 := Vector3(x1, WATER_LEVEL, z0)
+			var v01 := Vector3(x0, WATER_LEVEL, z1)
+			var v11 := Vector3(x1, WATER_LEVEL, z1)
+
+			st.set_uv(Vector2(x0 * 0.15, z0 * 0.15)); st.set_color(c00); st.set_normal(Vector3.UP); st.add_vertex(v00)
+			st.set_uv(Vector2(x1 * 0.15, z0 * 0.15)); st.set_color(c10); st.set_normal(Vector3.UP); st.add_vertex(v10)
+			st.set_uv(Vector2(x0 * 0.15, z1 * 0.15)); st.set_color(c01); st.set_normal(Vector3.UP); st.add_vertex(v01)
+
+			st.set_uv(Vector2(x1 * 0.15, z0 * 0.15)); st.set_color(c10); st.set_normal(Vector3.UP); st.add_vertex(v10)
+			st.set_uv(Vector2(x1 * 0.15, z1 * 0.15)); st.set_color(c11); st.set_normal(Vector3.UP); st.add_vertex(v11)
+			st.set_uv(Vector2(x0 * 0.15, z1 * 0.15)); st.set_color(c01); st.set_normal(Vector3.UP); st.add_vertex(v01)
+
+	var water := MeshInstance3D.new()
+	water.name = "MainLakeWater"
+	water.mesh = st.commit()
+	water.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+	var sm := ShaderMaterial.new()
+	var shader := Shader.new()
+	shader.code = """
+shader_type spatial;
+render_mode blend_mix, depth_draw_opaque, cull_disabled, diffuse_lambert_wrap;
+
+void fragment() {
+	float shore = COLOR.r;
+	float depth_factor = COLOR.g;
+
+	vec2 uv1 = UV * 3.5 + vec2(TIME * 0.08, TIME * 0.05);
+	vec2 uv2 = UV * 6.0 + vec2(-TIME * 0.06, TIME * 0.09);
+	float wave = sin(uv1.x * 6.28) * cos(uv1.y * 6.28) * 0.5 + sin((uv2.x + uv2.y) * 6.28) * 0.5;
+
+	vec3 shallow_col = vec3(0.22, 0.66, 0.68);
+	vec3 deep_col = vec3(0.07, 0.34, 0.52);
+	vec3 base_col = mix(shallow_col, deep_col, depth_factor);
+	base_col += wave * 0.035;
+
+	float foam_line = smoothstep(0.45, 0.92, shore + wave * 0.12);
+	vec3 final_col = mix(base_col, vec3(0.86, 0.95, 0.96), foam_line * 0.65);
+
+	ALBEDO = final_col;
+	ROUGHNESS = 0.22;
+	METALLIC = 0.05;
+	SPECULAR = 0.65;
+	ALPHA = clamp(mix(0.55, 0.92, depth_factor) + foam_line * 0.25, 0.0, 1.0);
+}
+"""
+	sm.shader = shader
+	water.material_override = sm
 	add_child(water)
+
+func _water_vertex_color(x: float, z: float) -> Color:
+	var ground_y := height_at(x, z)
+	var depth := maxf(0.0, WATER_LEVEL - ground_y)
+	var shore := 1.0 - clampf(depth / 0.55, 0.0, 1.0)
+	var depth_factor := clampf(depth / 1.8, 0.0, 1.0)
+	return Color(shore, depth_factor, 0.0, 1.0)

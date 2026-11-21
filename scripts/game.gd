@@ -85,6 +85,12 @@ const TURN_SPEED := 8.0
 const SHOW_CREATURE_UI := false
 const CAMERA_DISTANCE := 5.2
 const CAMERA_MIN_CLEARANCE := 2.2
+# Camera: primeira pessoa por padrao (contrato: olhos a 1,65 m). Botao VISAO alterna para terceira.
+const START_IN_FIRST_PERSON := true
+const EYE_HEIGHT_M := 1.65
+const FIRST_PERSON_FOV := 75.0
+const THIRD_PERSON_FOV := 62.0
+const FIRST_PERSON_PITCH_LIMIT := 1.2
 
 var player: CharacterBody3D
 var player_model: Node3D
@@ -99,6 +105,8 @@ var protagonist_model_status := "MODELO: NÃO TESTADO"
 var player_arm_parts: Array[Node3D] = []
 var player_leg_parts: Array[Node3D] = []
 var camera: Camera3D
+var first_person := START_IN_FIRST_PERSON
+var view_button: Button
 var creature: Node3D
 var creature_tail: Node3D
 var creature_leg_parts: Array[MeshInstance3D] = []
@@ -156,7 +164,7 @@ func _input(event: InputEvent) -> void:
 			camera_drag_active = false
 	elif event is InputEventScreenDrag and camera_drag_active and event.index == camera_touch_index:
 		target_look_yaw -= event.relative.x * CAMERA_SENSITIVITY
-		target_look_pitch = clampf(target_look_pitch + event.relative.y * CAMERA_SENSITIVITY, -0.38, 0.72)
+		target_look_pitch = _clamp_look_pitch(target_look_pitch + event.relative.y * CAMERA_SENSITIVITY, false)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		var screen_size := get_viewport().get_visible_rect().size
 		var in_camera_area: bool = event.position.x > screen_size.x * 0.48
@@ -165,7 +173,7 @@ func _input(event: InputEvent) -> void:
 		camera_drag_active = event.pressed and in_camera_area
 	elif event is InputEventMouseMotion and camera_drag_active and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		target_look_yaw -= event.relative.x * CAMERA_SENSITIVITY
-		target_look_pitch = clampf(target_look_pitch + event.relative.y * CAMERA_SENSITIVITY, -0.62, 0.88)
+		target_look_pitch = _clamp_look_pitch(target_look_pitch + event.relative.y * CAMERA_SENSITIVITY, true)
 
 func _process(delta: float) -> void:
 	if player == null:
@@ -187,25 +195,10 @@ func _process(delta: float) -> void:
 			foliage.rotation.z = base_rotation.z + cos(phase * 0.83) * strength * 0.72
 	look_yaw = lerp_angle(look_yaw, target_look_yaw, minf(delta * 5.2, 1.0))
 	look_pitch = lerpf(look_pitch, target_look_pitch, minf(delta * 7.0, 1.0))
-	var target := player.global_position + Vector3(0, 1.25, 0)
-	var horizontal := cos(look_pitch) * CAMERA_DISTANCE
-	var cam_offset := Vector3(sin(look_yaw) * horizontal, sin(look_pitch) * CAMERA_DISTANCE, cos(look_yaw) * horizontal)
-	var desired_camera_position := target + cam_offset
-	# Câmera elevada: não deixa a própria encosta ficar entre a lente e o jogador.
-	# O antigo raycast colocava a câmera 42 cm para dentro da superfície atingida.
-	desired_camera_position.y = maxf(desired_camera_position.y, _terrain_height(desired_camera_position.x, desired_camera_position.z) + CAMERA_MIN_CLEARANCE)
-	var camera_alpha := 1.0 - exp(-7.5 * delta)
-	camera.global_position = camera.global_position.lerp(desired_camera_position, camera_alpha)
-	# Colisão entre o alvo e a lente impede a câmera de atravessar encostas/árvores.
-	var camera_query := PhysicsRayQueryParameters3D.create(target, camera.global_position)
-	camera_query.collision_mask = 1
-	camera_query.exclude = [player.get_rid()]
-	var camera_hit := get_world_3d().direct_space_state.intersect_ray(camera_query)
-	if not camera_hit.is_empty():
-		camera.global_position = camera_hit.position + camera_hit.normal * 0.32
-	var final_floor := _terrain_height(camera.global_position.x, camera.global_position.z) + CAMERA_MIN_CLEARANCE
-	camera.global_position.y = maxf(camera.global_position.y, final_floor)
-	camera.look_at(target, Vector3.UP)
+	if first_person:
+		_update_first_person_camera()
+	else:
+		_update_third_person_camera(delta)
 	if creature and not creature_captured:
 		creature.rotate_y(delta * 0.55)
 		var creature_clock := Time.get_ticks_msec() * 0.00045
@@ -231,6 +224,55 @@ func _process(delta: float) -> void:
 				_update_status("Uma criatura selvagem apareceu! Toque em CAPTURAR.")
 			else:
 				_update_status("Explore o vale e encontre uma criatura!")
+
+func _clamp_look_pitch(value: float, wide: bool) -> float:
+	if first_person:
+		return clampf(value, -FIRST_PERSON_PITCH_LIMIT, FIRST_PERSON_PITCH_LIMIT)
+	if wide:
+		return clampf(value, -0.62, 0.88)
+	return clampf(value, -0.38, 0.72)
+
+func _update_first_person_camera() -> void:
+	# Olhos a EYE_HEIGHT_M acima dos pes. Pitch positivo = olhar para baixo.
+	camera.global_position = player.global_position + Vector3(0.0, EYE_HEIGHT_M, 0.0)
+	camera.rotation = Vector3(-look_pitch, look_yaw, 0.0)
+
+func _update_third_person_camera(delta: float) -> void:
+	var target := player.global_position + Vector3(0, 1.25, 0)
+	var horizontal := cos(look_pitch) * CAMERA_DISTANCE
+	var cam_offset := Vector3(sin(look_yaw) * horizontal, sin(look_pitch) * CAMERA_DISTANCE, cos(look_yaw) * horizontal)
+	var desired_camera_position := target + cam_offset
+	# Câmera elevada: não deixa a própria encosta ficar entre a lente e o jogador.
+	# O antigo raycast colocava a câmera 42 cm para dentro da superfície atingida.
+	desired_camera_position.y = maxf(desired_camera_position.y, _terrain_height(desired_camera_position.x, desired_camera_position.z) + CAMERA_MIN_CLEARANCE)
+	var camera_alpha := 1.0 - exp(-7.5 * delta)
+	camera.global_position = camera.global_position.lerp(desired_camera_position, camera_alpha)
+	# Colisão entre o alvo e a lente impede a câmera de atravessar encostas/árvores.
+	var camera_query := PhysicsRayQueryParameters3D.create(target, camera.global_position)
+	camera_query.collision_mask = 1
+	camera_query.exclude = [player.get_rid()]
+	var camera_hit := get_world_3d().direct_space_state.intersect_ray(camera_query)
+	if not camera_hit.is_empty():
+		camera.global_position = camera_hit.position + camera_hit.normal * 0.32
+	var final_floor := _terrain_height(camera.global_position.x, camera.global_position.z) + CAMERA_MIN_CLEARANCE
+	camera.global_position.y = maxf(camera.global_position.y, final_floor)
+	camera.look_at(target, Vector3.UP)
+
+func _apply_view_mode() -> void:
+	if camera:
+		camera.set_meta("mode", "first" if first_person else "third")
+		camera.fov = FIRST_PERSON_FOV if first_person else THIRD_PERSON_FOV
+	if player_model:
+		# Na primeira pessoa o corpo fica oculto para nao tampar a visao.
+		player_model.visible = not first_person
+	target_look_pitch = 0.0 if first_person else 0.38
+	if view_button:
+		view_button.text = "VISÃO\n1ª pessoa" if first_person else "VISÃO\n3ª pessoa"
+
+func _toggle_view() -> void:
+	first_person = not first_person
+	_apply_view_mode()
+
 
 func _physics_process(delta: float) -> void:
 	if player == null or not started:
@@ -1089,6 +1131,8 @@ func _build_player() -> void:
 	camera.fov = 62
 	camera.near = 0.18
 	camera.far = 140.0
+	camera.add_to_group("player_camera")
+	camera.set_meta("mode", "first" if first_person else "third")
 	add_child(camera)
 	var terrain_for_camera := get_node_or_null("Terrain3D")
 	if terrain_for_camera and terrain_for_camera.has_method("set_camera"):
@@ -1290,6 +1334,8 @@ func _build_player_fallback() -> void:
 	camera.fov = 62
 	camera.near = 0.18
 	camera.far = 140.0
+	camera.add_to_group("player_camera")
+	camera.set_meta("mode", "first" if first_person else "third")
 	add_child(camera)
 	var terrain_for_camera := get_node_or_null("Terrain3D")
 	if terrain_for_camera and terrain_for_camera.has_method("set_camera"):
@@ -1466,6 +1512,7 @@ func _start_game() -> void:
 	await get_tree().physics_frame
 	await _snap_player_to_terrain()
 	_build_ui()
+	_apply_view_mode()
 	started = true
 	_update_status("Explore a planície inicial.")
 	if start_menu:
@@ -1595,6 +1642,21 @@ func _build_ui() -> void:
 	capture_button.pressed.connect(_try_capture)
 	capture_button.visible = SHOW_CREATURE_UI
 	layer.add_child(capture_button)
+
+	# Botao para alternar primeira/terceira pessoa (fica na zona inferior direita, fora da area de arrastar a camera).
+	view_button = _make_button("VISÃO")
+	view_button.anchor_left = 1.0
+	view_button.anchor_top = 1.0
+	view_button.anchor_right = 1.0
+	view_button.anchor_bottom = 1.0
+	view_button.offset_left = -176
+	view_button.offset_top = -190
+	view_button.offset_right = -20
+	view_button.offset_bottom = -110
+	view_button.custom_minimum_size = Vector2(156, 80)
+	view_button.add_theme_font_size_override("font_size", 15)
+	view_button.pressed.connect(_toggle_view)
+	layer.add_child(view_button)
 
 func _make_button(text_value: String) -> Button:
 	var button := Button.new()

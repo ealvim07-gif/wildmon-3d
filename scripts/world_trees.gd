@@ -16,6 +16,38 @@ const TREE_HEIGHT_MAX_M := 15.0
 const TRUNK_RADIUS_M := 0.35 # raio da colisao do tronco, em metros reais
 const TRUNK_COLLISION_HEIGHT_M := 4.0
 const SNAP_BASE_TO_GROUND := true # apoia a base real do modelo no chao (evita flutuar ou afundar)
+# --- Estilo pintado: luz suave nas arvores, sem lado escuro pesado e sem brilho de plastico. ---
+const TREE_SOFT_LIGHT := true  # difusao "wrap": a luz contorna o objeto e suaviza o lado escuro
+const TREE_NO_SHINE := true    # remove brilho especular
+const TREE_TINT := Color(1.0, 0.99, 0.92) # multiplica a cor das arvores (levemente quente); Color(1,1,1) = sem mudar
+
+# Troca os materiais do modelo por copias suaves (uma copia por material, compartilhada entre as arvores).
+static func _stylize(tree: Node3D, cache: Dictionary) -> void:
+	var stack: Array[Node] = [tree]
+	while not stack.is_empty():
+		var node: Node = stack.pop_back()
+		for child in node.get_children():
+			stack.append(child)
+		if not (node is MeshInstance3D):
+			continue
+		var mesh_node := node as MeshInstance3D
+		if mesh_node.mesh == null:
+			continue
+		for surface in range(mesh_node.mesh.get_surface_count()):
+			var original: Material = mesh_node.get_active_material(surface)
+			if original == null or not (original is BaseMaterial3D):
+				continue
+			if not cache.has(original):
+				var soft := (original as BaseMaterial3D).duplicate() as BaseMaterial3D
+				if TREE_SOFT_LIGHT:
+					soft.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT_WRAP
+				if TREE_NO_SHINE:
+					soft.roughness = 1.0
+					soft.metallic = 0.0
+					soft.metallic_specular = 0.0
+				soft.albedo_color = soft.albedo_color * TREE_TINT
+				cache[original] = soft
+			mesh_node.set_surface_override_material(surface, cache[original])
 
 # Caixa do modelo no espaco do proprio nó da arvore, sem escala, rotacao ou posicao.
 static func _local_bounds(tree: Node3D) -> AABB:
@@ -55,6 +87,7 @@ static func build(game: Node, terrain: Node) -> void:
 	var min_native := 1000.0
 	var max_native := 0.0
 	var unmeasured := 0
+	var material_cache := {}
 	var positions: Array[Vector2] = []
 	var placed := 0
 	var attempts := 0
@@ -104,6 +137,7 @@ static func build(game: Node, terrain: Node) -> void:
 			unmeasured += 1
 			tree.set_meta("height_m", 0.0)
 		tree.add_to_group("trees")
+		_stylize(tree, material_cache)
 		var trunk_body := StaticBody3D.new()
 		trunk_body.name = "TreeTrunkCollision"
 		var collision := CollisionShape3D.new()
@@ -117,4 +151,4 @@ static func build(game: Node, terrain: Node) -> void:
 		tree.add_child(trunk_body)
 		positions.append(p)
 		placed += 1
-	print("[TREES] colocadas: ", placed, " | altura nativa do modelo: ", snapped(min_native, 0.01), " a ", snapped(max_native, 0.01), " | altura final (m): ", snapped(min_final, 0.1), " a ", snapped(max_final, 0.1), " | sem medida: ", unmeasured)
+	print("[TREES] colocadas: ", placed, " | altura nativa do modelo: ", snapped(min_native, 0.01), " a ", snapped(max_native, 0.01), " | altura final (m): ", snapped(min_final, 0.1), " a ", snapped(max_final, 0.1), " | sem medida: ", unmeasured, " | materiais suavizados: ", material_cache.size())

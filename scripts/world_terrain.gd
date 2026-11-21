@@ -13,6 +13,18 @@ const TEXTURE_REPEAT_M := 4.0 # a textura se repete a cada 4 m
 # Opcional: foto CC0 (Poly Haven / ambientCG). Se estes arquivos existirem, sao usados no lugar da procedural.
 const GRASS_ALBEDO_PATH := "res://assets/terrain/grass_albedo.jpg"
 const GRASS_NORMAL_PATH := "res://assets/terrain/grass_normal.jpg"
+# --- Estilo pintado (Legends: Arceus). Tudo aqui pode ser ajustado a mao. ---
+const GRASS_DARK := Color(0.24, 0.38, 0.17)
+const GRASS_MID := Color(0.42, 0.57, 0.24)
+const GRASS_LIGHT := Color(0.66, 0.74, 0.38)
+const GRASS_DRY := Color(0.74, 0.68, 0.38)
+const GRASS_DIRT := Color(0.50, 0.40, 0.26)
+const TINT_LOW := Color(0.80, 0.88, 0.68)   # variacao de cor em escala grande (campos mais frios)
+const TINT_HIGH := Color(1.00, 0.98, 0.84)  # (campos mais quentes e amarelados)
+const GROUND_TINT := Color(0.90, 0.92, 0.88) # multiplica toda a cor do chao; abaixe para escurecer
+const FINE_CONTRAST := 0.30    # contraste do grao fino (era 0.55): menor = mais suave e pintado
+const SPECKLE_LIGHT := 0.015   # fracao de pontinhos claros (era 0.035)
+const SPECKLE_DARK := 0.015    # fracao de pontinhos escuros (era 0.04)
 var height_noise := FastNoiseLite.new()
 var lake_noise := FastNoiseLite.new()
 var tint_noise := FastNoiseLite.new()
@@ -90,7 +102,7 @@ func _load_grass_textures() -> void:
 func _tint_at(x: float, z: float) -> Color:
 	# Variacao de cor em escala grande (dezenas de metros), para quebrar a repeticao da textura.
 	var u := tint_noise.get_noise_2d(x, z) * 0.5 + 0.5
-	return Color(0.80, 0.88, 0.72).lerp(Color(1.0, 1.0, 0.96), clampf(u, 0.0, 1.0))
+	return TINT_LOW.lerp(TINT_HIGH, clampf(u, 0.0, 1.0))
 
 func _seamless_layer(seed_value: int, frequency: float, octaves: int) -> PackedByteArray:
 	var n := FastNoiseLite.new()
@@ -115,18 +127,18 @@ func _make_grass_texture() -> Image:
 		return _make_grass_texture_legacy()
 	var data := PackedByteArray()
 	data.resize(total * 4)
-	var c_dark := Color(0.16, 0.30, 0.08)
-	var c_mid := Color(0.31, 0.50, 0.16)
-	var c_light := Color(0.52, 0.66, 0.27)
-	var c_dry := Color(0.58, 0.54, 0.26)
-	var c_dirt := Color(0.34, 0.26, 0.14)
+	var c_dark := GRASS_DARK
+	var c_mid := GRASS_MID
+	var c_light := GRASS_LIGHT
+	var c_dry := GRASS_DRY
+	var c_dirt := GRASS_DIRT
 	for y in range(size):
 		for x in range(size):
 			var i := y * size + x
 			var b := float(broad[i]) / 255.0
 			var m := float(mid[i]) / 255.0
 			var f := float(fine[i]) / 255.0
-			var t := clampf(0.15 + m * 0.65 + (f - 0.5) * 0.55, 0.0, 1.0)
+			var t := clampf(0.15 + m * 0.65 + (f - 0.5) * FINE_CONTRAST, 0.0, 1.0)
 			var col: Color
 			if t < 0.5:
 				col = c_dark.lerp(c_mid, t * 2.0)
@@ -137,9 +149,9 @@ func _make_grass_texture() -> Image:
 			col = col.lerp(c_dirt, smoothstep(0.78, 0.95, b * 0.6 + f * 0.4) * 0.6)
 			# Pontinhos claros e escuros isolados, parecendo folhas de grama.
 			var h := fposmod(sin(float(x) * 12.9898 + float(y) * 78.233) * 43758.5453, 1.0)
-			if h > 0.965:
+			if h > 1.0 - SPECKLE_LIGHT:
 				col = col.lightened(0.18)
-			elif h < 0.04:
+			elif h < SPECKLE_DARK:
 				col = col.darkened(0.22)
 			var j := i * 4
 			data[j] = int(clampf(col.r, 0.0, 1.0) * 255.0)
@@ -227,7 +239,7 @@ func _build_chunk(ox:float,oz:float) -> void:
 	if grass_normal != null:
 		mat.normal_enabled = true
 		mat.normal_texture = grass_normal
-	mat.albedo_color=Color(1.0,1.0,1.0)
+	mat.albedo_color=GROUND_TINT
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mat.roughness=1.0
 	mat.metallic=0.0

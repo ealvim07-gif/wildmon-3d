@@ -11,10 +11,10 @@
 
 ## 2. Contrato de escala e dados (o simulador testa isto)
 - 1 unidade = 1 metro. Jogador: 1,8 m de altura, olhos a 1,65 m, anda a 4,5 m/s, corre a 7 m/s.
-- Árvores: 6 a 18 m. Pedras: 0,5 a 3 m. Grama: 0,2 a 0,5 m.
+- Árvores: 13 a 25 m (folhosas 13–21 m, coníferas 17–25 m). Pedras: 0,5 a 3 m. Grama: 0,2 a 0,5 m.
 - Toda árvore entra no grupo `trees` e tem a meta `height_m` (altura em metros).
 - A câmera do jogador entra no grupo `player_camera` e tem a meta `mode` = `"first"` ou `"third"`.
-- O terreno expõe `height_at(x, z)`. A planície inicial (raio de 70 m) é totalmente plana.
+- O terreno expõe `height_at(x, z)`. A planície inicial (raio de 80 m) é suave, com ondulação de no máximo 0,5 m. O mundo tem 320 m (10 chunks de 32 m) e o jogador não passa de 150 m do centro.
 - O jogador nunca fica abaixo do chão, nunca atravessa o terreno e nunca fica preso.
 - Assets: apenas CC0 ou MIT, com a licença registrada em `assets/LICENSES.md`.
 - Limites para celular: texturas até 1024 px, modelos até 15 mil triângulos, sombras só perto do jogador.

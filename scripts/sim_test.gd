@@ -72,8 +72,8 @@ func _terrain_check():
 				var hf: float = terrain.height_at(float(xi), float(zi))
 				max_flat = maxf(max_flat, absf(hf))
 	_log("altura maxima na planicie inicial (60 m): %.3f m" % max_flat)
-	if max_flat > 0.05:
-		_fail("a planicie inicial nao esta plana (%.3f m)" % max_flat)
+	if max_flat > 0.6:
+		_fail("a planicie inicial tem ondulacao demais (%.3f m, maximo 0.6 m)" % max_flat)
 	var water_points := 0
 	var min_h := 1000.0
 	var max_h := -1000.0

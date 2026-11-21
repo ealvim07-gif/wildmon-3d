@@ -3,7 +3,7 @@ extends Node3D
 const DEBUG_TERRAIN_UNSHADED := true # Diagnostico visual temporario deste build.
 const CHUNK_SIZE := 32.0
 const CHUNKS := 8
-const CELLS := 24
+const CELLS := 12 # menos triangulos: carrega ~4x mais rapido no celular
 const FLAT_RADIUS := 80.0
 const WATER_LEVEL := -1.35
 const LAKE_CENTER := Vector2(112.0, 0.0)
@@ -111,12 +111,13 @@ func _build_chunk(ox:float,oz:float) -> void:
 			var d:=Vector3(x1,height_at(x1,z1),z1)
 			# UVs em coordenadas de mundo: textura repetida aproximadamente a cada 4 m.
 			# Normais calculadas pelo gradiente para evitar faces escuras/facetadas.
+			# Ordem horaria vista de cima (frente da face = para cima), exigida pela colisao do Godot.
 			st.set_uv(Vector2(x0 / 4.0, z0 / 4.0)); st.set_normal(_terrain_normal(x0,z0)); st.add_vertex(a)
-			st.set_uv(Vector2(x0 / 4.0, z1 / 4.0)); st.set_normal(_terrain_normal(x0,z1)); st.add_vertex(c)
-			st.set_uv(Vector2(x1 / 4.0, z0 / 4.0)); st.set_normal(_terrain_normal(x1,z0)); st.add_vertex(b)
 			st.set_uv(Vector2(x1 / 4.0, z0 / 4.0)); st.set_normal(_terrain_normal(x1,z0)); st.add_vertex(b)
 			st.set_uv(Vector2(x0 / 4.0, z1 / 4.0)); st.set_normal(_terrain_normal(x0,z1)); st.add_vertex(c)
+			st.set_uv(Vector2(x1 / 4.0, z0 / 4.0)); st.set_normal(_terrain_normal(x1,z0)); st.add_vertex(b)
 			st.set_uv(Vector2(x1 / 4.0, z1 / 4.0)); st.set_normal(_terrain_normal(x1,z1)); st.add_vertex(d)
+			st.set_uv(Vector2(x0 / 4.0, z1 / 4.0)); st.set_normal(_terrain_normal(x0,z1)); st.add_vertex(c)
 	var mesh:=st.commit()
 	var ground:=MeshInstance3D.new()
 	ground.mesh=mesh
@@ -138,7 +139,9 @@ func _build_chunk(ox:float,oz:float) -> void:
 	add_child(ground)
 	var body:=StaticBody3D.new()
 	var cs:=CollisionShape3D.new()
-	cs.shape=mesh.create_trimesh_shape()
+	var trimesh := mesh.create_trimesh_shape()
+	trimesh.backface_collision = true # o jogador nunca atravessa o chao, mesmo se a ordem das faces falhar
+	cs.shape=trimesh
 	body.add_child(cs)
 	add_child(body)
 

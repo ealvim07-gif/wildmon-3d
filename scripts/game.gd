@@ -257,8 +257,8 @@ func _physics_process(delta: float) -> void:
 	player.floor_snap_length = 0.9
 	player.move_and_slide()
 	var bounded_position := player.global_position
-	bounded_position.x = clampf(bounded_position.x, -64.0, 64.0)
-	bounded_position.z = clampf(bounded_position.z, -64.0, 64.0)
+	bounded_position.x = clampf(bounded_position.x, -118.0, 118.0)
+	bounded_position.z = clampf(bounded_position.z, -118.0, 118.0)
 	if bounded_position != player.global_position:
 		player.global_position = bounded_position
 		player.velocity.x = 0.0

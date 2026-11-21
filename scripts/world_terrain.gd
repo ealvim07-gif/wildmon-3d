@@ -1,5 +1,5 @@
 extends Node3D
-# Terreno estilizado com tapete de grama baixa/rasteira 3D, capim florido, lago e neblina para Android.
+# Terreno estilizado com relva 3D fina, lago turquesa visivel e neblina suave para Android.
 const DEBUG_TERRAIN_UNSHADED := false
 const CHUNK_SIZE := 32.0
 const CHUNKS := 8
@@ -9,51 +9,38 @@ const WATER_LEVEL := -1.35
 const LAKE_CENTER := Vector2(112.0, 0.0)
 const LAKE_RADIUS := 19.0
 const TEXTURE_SIZE := 256
-const TEXTURE_REPEAT_M := 1.4
+const TEXTURE_REPEAT_M := 6.0
 
-# --- Camada 1: Capim alto e florido (destaque visual) ---
-const TALL_GRASS_COUNT := 3400
-const TALL_GRASS_RADIUS := 52.0
-
-# --- Camada 2: Grama baixa e rasteira (cobre 100% do chao e elimina a "chapa verde") ---
-const LOW_GRASS_COUNT := 11500
-const LOW_GRASS_RADIUS := 42.0
+# --- Configuracao da Grama 3D (folhas finas e delicadas) ---
+const GRASS_COUNT := 7500
+const GRASS_RADIUS := 48.0
 const GRASS_UPDATE_STEP := 5.0
 
 # --- Neblina Atmosferica ---
 const HORIZON_FOG_COLOR := Color(0.69, 0.86, 0.98)
-const FOG_START_M := 56.0
-const FOG_END_M := 116.0
+const FOG_START_M := 58.0
+const FOG_END_M := 118.0
 
-# --- Paleta natural de relva rasteira (sem chapa lisa) ---
-const SOIL_DARK := Color(0.18, 0.24, 0.11)
-const MOSS_BASE := Color(0.24, 0.36, 0.14)
-const GRASS_OLIVE := Color(0.34, 0.48, 0.18)
-const GRASS_FRESH := Color(0.45, 0.60, 0.22)
-const DRY_EARTH := Color(0.42, 0.37, 0.21)
-const TINT_LOW := Color(0.84, 0.90, 0.74)
-const TINT_HIGH := Color(1.00, 0.96, 0.82)
-const GROUND_TINT := Color(0.92, 0.95, 0.86)
+# --- Paleta natural do solo (suave e sem grade) ---
+const SOIL_DARK := Color(0.24, 0.34, 0.16)
+const MOSS_BASE := Color(0.31, 0.44, 0.19)
+const GRASS_OLIVE := Color(0.39, 0.54, 0.23)
+const DRY_EARTH := Color(0.50, 0.45, 0.27)
+const TINT_LOW := Color(0.86, 0.92, 0.78)
+const TINT_HIGH := Color(0.98, 0.96, 0.84)
+const GROUND_TINT := Color(0.92, 0.94, 0.88)
 
 var height_noise := FastNoiseLite.new()
 var lake_noise := FastNoiseLite.new()
 var tint_noise := FastNoiseLite.new()
 var ground_albedo_tex: Texture2D
-var ground_normal_tex: Texture2D
 
-var _tall_mm: MultiMesh
-var _low_mm: MultiMesh
+var _grass_mm: MultiMesh
 var _last_grass_center := Vector2(99999.0, 99999.0)
-
-var _tall_offsets: PackedVector3Array
-var _tall_scales: PackedVector2Array
-var _tall_rotations: PackedFloat32Array
-var _tall_colors: PackedColorArray
-
-var _low_offsets: PackedVector3Array
-var _low_scales: PackedVector2Array
-var _low_rotations: PackedFloat32Array
-var _low_colors: PackedColorArray
+var _grass_offsets: PackedVector3Array
+var _grass_scales: PackedVector2Array
+var _grass_rotations: PackedFloat32Array
+var _grass_colors: PackedColorArray
 
 func _make_marker_rock(position_x: float, position_z: float, size: Vector3) -> void:
 	var rock := MeshInstance3D.new()
@@ -86,9 +73,9 @@ func _ready() -> void:
 	tint_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
 	tint_noise.fractal_octaves = 2
 
-	_build_ground_textures()
+	_build_ground_texture()
 	_build_chunks()
-	_init_dynamic_grass_layers()
+	_init_dynamic_grass()
 	_update_grass_around(Vector2.ZERO)
 	_build_lake()
 	_build_clouds()
@@ -137,116 +124,42 @@ func _seamless_layer(seed_value: int, frequency: float, octaves: int) -> PackedB
 	img.convert(Image.FORMAT_L8)
 	return img.get_data()
 
-func _build_ground_textures() -> void:
-	# Gera textura densa de relva rasteira + Normal Map para dar relevo real entre os talos
+func _build_ground_texture() -> void:
+	# Textura organica suave sem padrao quadriculado
 	var size := TEXTURE_SIZE
 	var total := size * size
-	var broad := _seamless_layer(418, 0.025, 2)
-	var fine := _seamless_layer(991, 0.35, 3)
+	var broad := _seamless_layer(418, 0.018, 2)
+	var mid := _seamless_layer(733, 0.055, 3)
+	var fine := _seamless_layer(991, 0.18, 2)
 
 	var albedo_bytes := PackedByteArray()
 	albedo_bytes.resize(total * 4)
-	var heights := PackedFloat32Array()
-	heights.resize(total)
 
-	var inv := TAU / float(size)
-	for y in range(size):
-		var fy := float(y) * inv
-		for x in range(size):
-			var fx := float(x) * inv
-			var i := y * size + x
-			var b := float(broad[i]) / 255.0 if broad.size() == total else 0.5
-			var f := float(fine[i]) / 255.0 if fine.size() == total else 0.5
+	for i in range(total):
+		var b := float(broad[i]) / 255.0 if broad.size() == total else 0.5
+		var m := float(mid[i]) / 255.0 if mid.size() == total else 0.5
+		var f := float(fine[i]) / 255.0 if fine.size() == total else 0.5
+		var h_val := clampf(m * 0.58 + f * 0.27 + b * 0.15, 0.0, 1.0)
 
-			# Micro-laminas de grama rasteira em alta frequencia
-			var micro_a := sin(fx * 34.0 + fy * 11.0 + f * 4.5) * 0.5 + 0.5
-			var micro_b := cos(fx * 15.0 - fy * 31.0 - f * 3.8) * 0.5 + 0.5
-			var h_val := clampf(micro_a * 0.45 + micro_b * 0.35 + f * 0.20, 0.0, 1.0)
-			heights[i] = h_val
+		var col: Color
+		if h_val < 0.35:
+			col = SOIL_DARK.lerp(MOSS_BASE, h_val / 0.35)
+		else:
+			col = MOSS_BASE.lerp(GRASS_OLIVE, (h_val - 0.35) / 0.65)
+		col = col.lerp(DRY_EARTH, smoothstep(0.62, 0.90, b) * 0.45)
 
-			var col: Color
-			if h_val < 0.32:
-				col = SOIL_DARK.lerp(MOSS_BASE, h_val / 0.32)
-			elif h_val < 0.72:
-				col = MOSS_BASE.lerp(GRASS_OLIVE, (h_val - 0.32) / 0.40)
-			else:
-				col = GRASS_OLIVE.lerp(GRASS_FRESH, (h_val - 0.72) / 0.28)
-			col = col.lerp(DRY_EARTH, smoothstep(0.65, 0.92, b) * 0.42)
-
-			var j := i * 4
-			albedo_bytes[j] = int(col.r * 255.0)
-			albedo_bytes[j + 1] = int(col.g * 255.0)
-			albedo_bytes[j + 2] = int(col.b * 255.0)
-			albedo_bytes[j + 3] = 255
+		var j := i * 4
+		albedo_bytes[j] = int(col.r * 255.0)
+		albedo_bytes[j + 1] = int(col.g * 255.0)
+		albedo_bytes[j + 2] = int(col.b * 255.0)
+		albedo_bytes[j + 3] = 255
 
 	var albedo_img := Image.create_from_data(size, size, false, Image.FORMAT_RGBA8, albedo_bytes)
 	albedo_img.generate_mipmaps()
 	ground_albedo_tex = ImageTexture.create_from_image(albedo_img)
 
-	# Normal map a partir da altura das micro-folhas
-	var norm_bytes := PackedByteArray()
-	norm_bytes.resize(total * 4)
-	for y in range(size):
-		var ym := (y - 1 + size) % size
-		var yp := (y + 1) % size
-		for x in range(size):
-			var xm := (x - 1 + size) % size
-			var xp := (x + 1) % size
-			var dx := (heights[y * size + xp] - heights[y * size + xm]) * 2.4
-			var dy := (heights[yp * size + x] - heights[ym * size + x]) * 2.4
-			var n := Vector3(-dx, -dy, 1.0).normalized()
-			var j := (y * size + x) * 4
-			norm_bytes[j] = int((n.x * 0.5 + 0.5) * 255.0)
-			norm_bytes[j + 1] = int((n.y * 0.5 + 0.5) * 255.0)
-			norm_bytes[j + 2] = int((n.z * 0.5 + 0.5) * 255.0)
-			norm_bytes[j + 3] = 255
-
-	var norm_img := Image.create_from_data(size, size, false, Image.FORMAT_RGBA8, norm_bytes)
-	norm_img.generate_mipmaps()
-	ground_normal_tex = ImageTexture.create_from_image(norm_img)
-
-func _make_low_grass_texture() -> ImageTexture:
-	# Tufo baixo, largo e cheio de folhinhas abertas para cobrir o solo como tapete natural
-	var w := 128
-	var h := 96
-	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0, 0, 0, 0))
-
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 445566
-
-	for b in range(42):
-		var base_x := rng.randf_range(12.0, float(w - 12))
-		var spread := rng.randf_range(-34.0, 34.0)
-		var tip_x := clampf(base_x + spread, 4.0, float(w - 4))
-		var blade_h := rng.randf_range(34.0, 82.0)
-		var base_w := rng.randf_range(4.5, 8.0)
-
-		var col_base := Color(0.24, 0.38, 0.14).lerp(Color(0.32, 0.48, 0.18), rng.randf())
-		var col_tip := Color(0.46, 0.64, 0.24).lerp(Color(0.62, 0.76, 0.30), rng.randf())
-
-		var steps := int(blade_h)
-		for s in range(steps):
-			var t := float(s) / maxf(1.0, blade_h)
-			var y := h - 1 - s
-			if y < 0:
-				break
-			# Folhas rasteiras arqueadas para fora
-			var arch := pow(t, 1.35)
-			var cx := lerpf(base_x, tip_x, arch)
-			var half_w := maxf(1.1, base_w * (1.0 - t * 0.82))
-			var c := col_base.lerp(col_tip, t)
-
-			var x0 := clampi(int(cx - half_w), 0, w - 1)
-			var x1 := clampi(int(cx + half_w), 0, w - 1)
-			for px in range(x0, x1 + 1):
-				img.set_pixel(px, y, Color(c.r, c.g, c.b, 1.0))
-
-	img.generate_mipmaps()
-	return ImageTexture.create_from_image(img)
-
-func _make_tall_grass_texture() -> ImageTexture:
-	# Capim alto com espigas floridas amarelas e rosadas
+func _make_fine_grass_texture() -> ImageTexture:
+	# Folhas finas, delicadas e verticais (sem faixas grossas deitadas)
 	var w := 128
 	var h := 128
 	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
@@ -255,17 +168,17 @@ func _make_tall_grass_texture() -> ImageTexture:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 90210
 
-	for b in range(24):
+	for b in range(34):
 		var base_x := rng.randf_range(16.0, float(w - 16))
-		var tip_x := base_x + rng.randf_range(-24.0, 24.0)
-		var blade_h := rng.randf_range(56.0, 118.0)
-		var base_w := rng.randf_range(4.0, 6.8)
-		var has_flower := rng.randf() < 0.38
+		var tip_x := base_x + rng.randf_range(-14.0, 14.0)
+		var blade_h := rng.randf_range(44.0, 112.0)
+		var base_w := rng.randf_range(1.6, 3.0)
+		var has_flower := rng.randf() < 0.24
 		var is_pink_flower := rng.randf() < 0.45
 
-		var col_base := Color(0.28, 0.42, 0.18).lerp(Color(0.36, 0.52, 0.22), rng.randf())
-		var col_tip := Color(0.56, 0.72, 0.28).lerp(Color(0.76, 0.84, 0.36), rng.randf())
-		var flower_col := Color(0.92, 0.66, 0.64) if is_pink_flower else Color(0.98, 0.91, 0.44)
+		var col_base := Color(0.28, 0.44, 0.17).lerp(Color(0.36, 0.54, 0.21), rng.randf())
+		var col_tip := Color(0.54, 0.72, 0.28).lerp(Color(0.72, 0.82, 0.35), rng.randf())
+		var flower_col := Color(0.92, 0.66, 0.64) if is_pink_flower else Color(0.98, 0.90, 0.42)
 
 		var steps := int(blade_h)
 		for s in range(steps):
@@ -275,12 +188,12 @@ func _make_tall_grass_texture() -> ImageTexture:
 				break
 			var curve := sin(t * PI * 0.5)
 			var cx := lerpf(base_x, tip_x, curve * curve)
-			var half_w := maxf(1.0, base_w * (1.0 - t * 0.84))
+			var half_w := maxf(0.5, base_w * (1.0 - t * 0.88))
 			var c := col_base.lerp(col_tip, t)
-			if has_flower and t > 0.58:
-				var bud := sin(t * 44.0) * 0.5 + 0.5
-				half_w += bud * 2.4
-				c = c.lerp(flower_col, 0.78 + bud * 0.22)
+			if has_flower and t > 0.66:
+				var bud := sin(t * 46.0) * 0.5 + 0.5
+				half_w += bud * 1.1
+				c = c.lerp(flower_col, 0.75 + bud * 0.25)
 
 			var x0 := clampi(int(cx - half_w), 0, w - 1)
 			var x1 := clampi(int(cx + half_w), 0, w - 1)
@@ -310,7 +223,8 @@ func _build_star_tuft_mesh(half_width: float, height: float) -> ArrayMesh:
 		st.set_uv(Vector2(0.0, 0.0)); st.set_normal(Vector3.UP); st.add_vertex(p2)
 	return st.commit()
 
-func _make_grass_shader_material(tex: Texture2D, fade_start: float, fade_end: float, wind_amp: float) -> ShaderMaterial:
+func _init_dynamic_grass() -> void:
+	var tuft_mesh := _build_star_tuft_mesh(0.42, 1.0)
 	var mat := ShaderMaterial.new()
 	var shader := Shader.new()
 	shader.code = """
@@ -318,14 +232,11 @@ shader_type spatial;
 render_mode cull_disabled, depth_draw_opaque, unshaded;
 
 uniform sampler2D grass_tex : source_color, filter_linear_mipmap;
-uniform float u_fade_start = 36.0;
-uniform float u_fade_end = 52.0;
-uniform float u_wind_amp = 0.14;
 
 void vertex() {
 	float sway_mask = 1.0 - UV.y;
 	vec3 world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	float gust = sin(TIME * 1.9 + world_pos.x * 0.34 + world_pos.z * 0.28) * u_wind_amp;
+	float gust = sin(TIME * 1.9 + world_pos.x * 0.34 + world_pos.z * 0.28) * 0.12;
 	VERTEX.x += gust * sway_mask;
 	VERTEX.z += gust * 0.65 * sway_mask;
 }
@@ -336,133 +247,71 @@ void fragment() {
 		discard;
 	}
 	float cam_dist = length(VERTEX);
-	float dist_fade = 1.0 - smoothstep(u_fade_start, u_fade_end, cam_dist);
+	float dist_fade = 1.0 - smoothstep(32.0, 47.0, cam_dist);
 	if (dist_fade < 0.05) {
 		discard;
 	}
 	float height_grad = clamp(1.0 - UV.y, 0.0, 1.0);
-	vec3 root_shade = vec3(0.56, 0.64, 0.42);
-	vec3 sun_lit = vec3(1.06, 1.05, 0.94);
+	vec3 root_shade = vec3(0.62, 0.70, 0.46);
+	vec3 sun_lit = vec3(1.04, 1.03, 0.94);
 	vec3 light_tint = mix(root_shade, sun_lit, smoothstep(0.0, 0.72, height_grad));
 	ALBEDO = tex.rgb * COLOR.rgb * light_tint;
 }
 """
 	mat.shader = shader
-	mat.set_shader_parameter("grass_tex", tex)
-	mat.set_shader_parameter("u_fade_start", fade_start)
-	mat.set_shader_parameter("u_fade_end", fade_end)
-	mat.set_shader_parameter("u_wind_amp", wind_amp)
-	return mat
+	mat.set_shader_parameter("grass_tex", _make_fine_grass_texture())
+	tuft_mesh.surface_set_material(0, mat)
 
-func _init_dynamic_grass_layers() -> void:
-	# 1. Camada Rasteira Densa (cobre toda a superficie do solo)
-	var low_mesh := _build_star_tuft_mesh(0.95, 1.0)
-	low_mesh.surface_set_material(0, _make_grass_shader_material(_make_low_grass_texture(), 26.0, LOW_GRASS_RADIUS, 0.05))
+	_grass_mm = MultiMesh.new()
+	_grass_mm.transform_format = MultiMesh.TRANSFORM_3D
+	_grass_mm.use_colors = true
+	_grass_mm.mesh = tuft_mesh
+	_grass_mm.instance_count = GRASS_COUNT
 
-	_low_mm = MultiMesh.new()
-	_low_mm.transform_format = MultiMesh.TRANSFORM_3D
-	_low_mm.use_colors = true
-	_low_mm.mesh = low_mesh
-	_low_mm.instance_count = LOW_GRASS_COUNT
-
-	_low_offsets.resize(LOW_GRASS_COUNT)
-	_low_scales.resize(LOW_GRASS_COUNT)
-	_low_rotations.resize(LOW_GRASS_COUNT)
-	_low_colors.resize(LOW_GRASS_COUNT)
+	_grass_offsets.resize(GRASS_COUNT)
+	_grass_scales.resize(GRASS_COUNT)
+	_grass_rotations.resize(GRASS_COUNT)
+	_grass_colors.resize(GRASS_COUNT)
 
 	var rng := RandomNumberGenerator.new()
-	rng.seed = 112233
-	for i in range(LOW_GRASS_COUNT):
-		var r := sqrt(rng.randf()) * LOW_GRASS_RADIUS
-		var theta := rng.randf() * TAU
-		_low_offsets[i] = Vector3(cos(theta) * r, 0.0, sin(theta) * r)
-		# Bem baixinha (16 a 28 cm) e larga para fechar o tapete no chao
-		_low_scales[i] = Vector2(rng.randf_range(1.15, 1.75), rng.randf_range(0.16, 0.28))
-		_low_rotations[i] = rng.randf() * TAU
-		_low_colors[i] = Color(0.84, 0.94, 0.74).lerp(Color(1.04, 1.00, 0.80), rng.randf())
-
-	var low_node := MultiMeshInstance3D.new()
-	low_node.name = "LowCarpetGrassField"
-	low_node.multimesh = _low_mm
-	low_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(low_node)
-
-	# 2. Camada Alta Florida (moitas de destaque)
-	var tall_mesh := _build_star_tuft_mesh(0.65, 1.0)
-	tall_mesh.surface_set_material(0, _make_grass_shader_material(_make_tall_grass_texture(), 36.0, TALL_GRASS_RADIUS, 0.16))
-
-	_tall_mm = MultiMesh.new()
-	_tall_mm.transform_format = MultiMesh.TRANSFORM_3D
-	_tall_mm.use_colors = true
-	_tall_mm.mesh = tall_mesh
-	_tall_mm.instance_count = TALL_GRASS_COUNT
-
-	_tall_offsets.resize(TALL_GRASS_COUNT)
-	_tall_scales.resize(TALL_GRASS_COUNT)
-	_tall_rotations.resize(TALL_GRASS_COUNT)
-	_tall_colors.resize(TALL_GRASS_COUNT)
-
 	rng.seed = 774411
-	for i in range(TALL_GRASS_COUNT):
-		var r := sqrt(rng.randf()) * TALL_GRASS_RADIUS
+	for i in range(GRASS_COUNT):
+		var r := sqrt(rng.randf()) * GRASS_RADIUS
 		var theta := rng.randf() * TAU
-		_tall_offsets[i] = Vector3(cos(theta) * r, 0.0, sin(theta) * r)
-		_tall_scales[i] = Vector2(rng.randf_range(0.95, 1.45), rng.randf_range(0.52, 0.98))
-		_tall_rotations[i] = rng.randf() * TAU
-		_tall_colors[i] = Color(0.86, 0.96, 0.76).lerp(Color(1.08, 1.02, 0.78), rng.randf())
+		_grass_offsets[i] = Vector3(cos(theta) * r, 0.0, sin(theta) * r)
+		# Altura variada (relva baixa de 26 cm ate capim medio de 64 cm), sem largura exagerada
+		_grass_scales[i] = Vector2(rng.randf_range(0.75, 1.15), rng.randf_range(0.26, 0.64))
+		_grass_rotations[i] = rng.randf() * TAU
+		_grass_colors[i] = Color(0.86, 0.95, 0.76).lerp(Color(1.05, 1.00, 0.80), rng.randf())
 
-	var tall_node := MultiMeshInstance3D.new()
-	tall_node.name = "TallFloweringGrassField"
-	tall_node.multimesh = _tall_mm
-	tall_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(tall_node)
+	var grass_node := MultiMeshInstance3D.new()
+	grass_node.name = "StylizedGrassField"
+	grass_node.multimesh = _grass_mm
+	grass_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(grass_node)
 
 func _update_grass_around(center: Vector2) -> void:
 	_last_grass_center = center
-
-	# Atualiza grama baixa/rasteira
-	var low_span := LOW_GRASS_RADIUS * 2.0
-	var low_idx := 0
-	for i in range(LOW_GRASS_COUNT):
-		var wx := center.x + fposmod((_low_offsets[i].x - center.x) + LOW_GRASS_RADIUS, low_span) - LOW_GRASS_RADIUS
-		var wz := center.y + fposmod((_low_offsets[i].z - center.y) + LOW_GRASS_RADIUS, low_span) - LOW_GRASS_RADIUS
+	var span := GRASS_RADIUS * 2.0
+	var idx := 0
+	for i in range(GRASS_COUNT):
+		var wx := center.x + fposmod((_grass_offsets[i].x - center.x) + GRASS_RADIUS, span) - GRASS_RADIUS
+		var wz := center.y + fposmod((_grass_offsets[i].z - center.y) + GRASS_RADIUS, span) - GRASS_RADIUS
 		var p := Vector2(wx, wz)
-		if p.distance_to(center) > LOW_GRASS_RADIUS:
+		if p.distance_to(center) > GRASS_RADIUS:
 			continue
-		if p.distance_to(LAKE_CENTER) < LAKE_RADIUS + 1.8:
+		if p.distance_to(LAKE_CENTER) < LAKE_RADIUS + 2.0:
 			continue
 		var y := height_at(wx, wz)
-		if y < WATER_LEVEL + 0.12:
+		if y < WATER_LEVEL + 0.14:
 			continue
-		var sc := _low_scales[i]
-		var t := Transform3D().scaled(Vector3(sc.x, sc.y, sc.x)).rotated(Vector3.UP, _low_rotations[i])
-		t.origin = Vector3(wx, y - 0.02, wz)
-		_low_mm.set_instance_transform(low_idx, t)
-		_low_mm.set_instance_color(low_idx, _low_colors[i])
-		low_idx += 1
-	_low_mm.visible_instance_count = low_idx
-
-	# Atualiza capim alto florido
-	var tall_span := TALL_GRASS_RADIUS * 2.0
-	var tall_idx := 0
-	for i in range(TALL_GRASS_COUNT):
-		var wx := center.x + fposmod((_tall_offsets[i].x - center.x) + TALL_GRASS_RADIUS, tall_span) - TALL_GRASS_RADIUS
-		var wz := center.y + fposmod((_tall_offsets[i].z - center.y) + TALL_GRASS_RADIUS, tall_span) - TALL_GRASS_RADIUS
-		var p := Vector2(wx, wz)
-		if p.distance_to(center) > TALL_GRASS_RADIUS:
-			continue
-		if p.distance_to(LAKE_CENTER) < LAKE_RADIUS + 2.4:
-			continue
-		var y := height_at(wx, wz)
-		if y < WATER_LEVEL + 0.18:
-			continue
-		var sc := _tall_scales[i]
-		var t := Transform3D().scaled(Vector3(sc.x, sc.y, sc.x)).rotated(Vector3.UP, _tall_rotations[i])
-		t.origin = Vector3(wx, y - 0.04, wz)
-		_tall_mm.set_instance_transform(tall_idx, t)
-		_tall_mm.set_instance_color(tall_idx, _tall_colors[i])
-		tall_idx += 1
-	_tall_mm.visible_instance_count = tall_idx
+		var sc := _grass_scales[i]
+		var t := Transform3D().scaled(Vector3(sc.x, sc.y, sc.x)).rotated(Vector3.UP, _grass_rotations[i])
+		t.origin = Vector3(wx, y - 0.03, wz)
+		_grass_mm.set_instance_transform(idx, t)
+		_grass_mm.set_instance_color(idx, _grass_colors[i])
+		idx += 1
+	_grass_mm.visible_instance_count = idx
 
 func _terrain_normal(x: float, z: float) -> Vector3:
 	var e := 0.5
@@ -524,9 +373,6 @@ func _build_chunk(ox: float, oz: float) -> void:
 	ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var mat := StandardMaterial3D.new()
 	mat.albedo_texture = ground_albedo_tex
-	mat.normal_enabled = true
-	mat.normal_texture = ground_normal_tex
-	mat.normal_scale = 1.25
 	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	mat.vertex_color_use_as_albedo = true
 	mat.uv1_triplanar = true
@@ -549,16 +395,15 @@ func _build_chunk(ox: float, oz: float) -> void:
 	add_child(body)
 
 func _build_clouds() -> void:
-	# Cupula ampla sem borda de arco visivel no ceu
 	var dome := MeshInstance3D.new()
 	dome.name = "StylizedCloudDome"
 	var sphere := SphereMesh.new()
-	sphere.radius = 380.0
-	sphere.height = 340.0
+	sphere.radius = 420.0
+	sphere.height = 420.0
 	sphere.radial_segments = 40
 	sphere.rings = 20
 	dome.mesh = sphere
-	dome.position = Vector3(0.0, -25.0, 0.0)
+	dome.position = Vector3(0.0, 0.0, 0.0)
 	dome.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 	var sm := ShaderMaterial.new()
@@ -615,7 +460,7 @@ void fragment() {
 
 	float cloud_alpha = smoothstep(0.46, 0.66, density);
 	float horizon_cloud_fade = smoothstep(0.02, 0.16, pos_h);
-	float zenith_fade = 1.0 - smoothstep(0.55, 0.92, pos_h);
+	float zenith_fade = 1.0 - smoothstep(0.45, 0.85, pos_h);
 
 	vec3 base_shadow = vec3(0.75, 0.85, 0.96);
 	vec3 sunlit_top = vec3(1.00, 0.99, 0.95);
@@ -623,10 +468,10 @@ void fragment() {
 	vec3 cloud_col = mix(base_shadow, sunlit_top, shade);
 
 	vec3 horizon_haze = vec3(0.69, 0.86, 0.98);
-	float haze_band = 1.0 - smoothstep(0.0, 0.15, pos_h);
+	float haze_band = 1.0 - smoothstep(0.0, 0.14, pos_h);
 
-	ALBEDO = mix(cloud_col, horizon_haze, haze_band * 0.88);
-	ALPHA = max(cloud_alpha * horizon_cloud_fade * zenith_fade * 0.92, haze_band * 0.90);
+	ALBEDO = mix(cloud_col, horizon_haze, haze_band * 0.85);
+	ALPHA = max(cloud_alpha * horizon_cloud_fade * zenith_fade * 0.92, haze_band * 0.88);
 }
 """
 	sm.shader = shader
@@ -720,9 +565,10 @@ func _build_lake() -> void:
 
 	var sm := ShaderMaterial.new()
 	var shader := Shader.new()
+	# Render mode unshaded opaco: 100% visivel no Android Compatibility sem desaparecer
 	shader.code = """
 shader_type spatial;
-render_mode blend_mix, depth_draw_opaque, cull_disabled, diffuse_lambert_wrap;
+render_mode unshaded, cull_disabled;
 
 void fragment() {
 	float shore = COLOR.r;
@@ -732,19 +578,13 @@ void fragment() {
 	vec2 uv2 = UV * 6.0 + vec2(-TIME * 0.06, TIME * 0.09);
 	float wave = sin(uv1.x * 6.28) * cos(uv1.y * 6.28) * 0.5 + sin((uv2.x + uv2.y) * 6.28) * 0.5;
 
-	vec3 shallow_col = vec3(0.22, 0.66, 0.68);
-	vec3 deep_col = vec3(0.07, 0.34, 0.52);
+	vec3 shallow_col = vec3(0.24, 0.72, 0.74);
+	vec3 deep_col = vec3(0.08, 0.38, 0.58);
 	vec3 base_col = mix(shallow_col, deep_col, depth_factor);
 	base_col += wave * 0.035;
 
 	float foam_line = smoothstep(0.45, 0.92, shore + wave * 0.12);
-	vec3 final_col = mix(base_col, vec3(0.86, 0.95, 0.96), foam_line * 0.65);
-
-	ALBEDO = final_col;
-	ROUGHNESS = 0.22;
-	METALLIC = 0.05;
-	SPECULAR = 0.65;
-	ALPHA = clamp(mix(0.55, 0.92, depth_factor) + foam_line * 0.25, 0.0, 1.0);
+	ALBEDO = mix(base_col, vec3(0.88, 0.96, 0.98), foam_line * 0.68);
 }
 """
 	sm.shader = shader

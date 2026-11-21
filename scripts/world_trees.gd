@@ -1,19 +1,22 @@
 extends RefCounted
 
 const USE_TREES := true
-const TREE_COUNT := 80
+const TREE_COUNT := 120
 const TREE_NAMES := ["CommonTree_1", "CommonTree_2", "CommonTree_3", "Pine_1", "Pine_2"]
-const AREA_LIMIT := 115.0
+const AREA_LIMIT := 145.0 # acompanha o mundo maior (320 m)
 const START_EXCLUSION := 40.0
 const LAKE_CENTER := Vector2(112.0, 0.0)
 const LAKE_EXCLUSION := 30.0
-const MIN_TREE_DISTANCE := 6.0
+const MIN_TREE_DISTANCE := 9.0 # arvores maiores precisam de mais espaco
 const MIN_GROUND_HEIGHT := -0.3
 const FIXED_SEED := 24681357
-# Contrato de escala (PROJECT_RULES.md, secao 2): arvores de 6 a 18 m. Altere aqui para ajustar.
-const TREE_HEIGHT_MIN_M := 9.0
-const TREE_HEIGHT_MAX_M := 15.0
-const TRUNK_RADIUS_M := 0.35 # raio da colisao do tronco, em metros reais
+# Contrato de escala (PROJECT_RULES.md, secao 2): folhosas 13 a 21 m, conifers 17 a 25 m. Altere aqui para ajustar.
+const TREE_HEIGHT_MIN_M := 13.0
+const TREE_HEIGHT_MAX_M := 21.0
+const CONIFER_HEIGHT_MIN_M := 17.0
+const CONIFER_HEIGHT_MAX_M := 25.0
+const CONIFER_ASPECT := 0.56 # modelo mais estreito que isso (largura/altura) e tratado como conifera
+const TRUNK_RADIUS_M := 0.55 # raio da colisao do tronco, em metros reais
 const TRUNK_COLLISION_HEIGHT_M := 4.0
 const SNAP_BASE_TO_GROUND := true # apoia a base real do modelo no chao (evita flutuar ou afundar)
 # --- Estilo pintado: luz suave nas arvores, sem lado escuro pesado e sem brilho de plastico. ---
@@ -121,7 +124,11 @@ static func build(game: Node, terrain: Node) -> void:
 		var bounds := _local_bounds(tree)
 		var native_height := bounds.size.y
 		var tree_scale := tree.scale.x
+		var aspect := maxf(bounds.size.x, bounds.size.z) / maxf(native_height, 0.01)
+		var is_conifer := aspect < CONIFER_ASPECT
 		var target_height := height_rng.randf_range(TREE_HEIGHT_MIN_M, TREE_HEIGHT_MAX_M)
+		if is_conifer:
+			target_height = height_rng.randf_range(CONIFER_HEIGHT_MIN_M, CONIFER_HEIGHT_MAX_M)
 		if native_height > 0.01:
 			tree_scale = target_height / native_height
 			tree.scale = Vector3.ONE * tree_scale

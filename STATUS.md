@@ -11,17 +11,20 @@
 - Lagos com água; o personagem anda no fundo sem atravessar.
 - Carregamento depois do botão Iniciar é lento (a otimizar).
 
+- Câmera em primeira pessoa por padrão (olhos a 1,65 m, constante EYE_HEIGHT_M em game.gd) com botão VISÃO para alternar para terceira pessoa. Confirmado no celular. O simulador mediu modo `first` e olhos a 1,67 m.
+
 ## Implementado, NÃO confirmado no celular
-- Tarefa 2: câmera em primeira pessoa por padrão (olhos a 1,65 m, constante EYE_HEIGHT_M em game.gd) com botão VISÃO para alternar para terceira pessoa. A câmera está no grupo `player_camera` com meta `mode`.
+- Tarefa 3: escala das árvores em scripts/world_trees.gd. Cada árvore tem a altura do modelo medida e é escalada para uma altura entre TREE_HEIGHT_MIN_M e TREE_HEIGHT_MAX_M (9 a 15 m), entra no grupo `trees` com a meta `height_m`, e a base é apoiada no chão. Colisão do tronco com raio de 0,35 m reais.
 
 ## Problemas conhecidos
 - Textura do chão procedural (ruído), não parece realista. world_terrain.gd já aceita fotos em assets/terrain/grass_albedo.jpg e grass_normal.jpg.
-- Proporções das árvores sem padrão de escala (árvores vêm de scripts/world_trees.gd; contrato em PROJECT_RULES.md, seção 2).
+- Troncos de alguns pinheiros aparecem inclinados e com galhos nus (parece ser do modelo Pine_1/Pine_2); copas com sombra bem escura. Não tratado.
+- Água do lago: manchas azuis de borda recortada; uma parece acima do chão ao redor (suspeita, não medida).
 - Mundo limitado a 256 m, com limite de movimento de ±118 m.
 - world_terrain.gd calcula a normal de cada vértice com 4 chamadas a height_at (pode pesar no carregamento).
 
 ## Última tarefa concluída
-Nenhuma ainda com as regras novas. Tarefa 1 (simulador no workflow) feita no commit c512442, resultado A CONFIRMAR. Tarefa 2 (primeira pessoa) escrita, A CONFIRMAR após Validate, Build APK, Simulador e teste no celular.
+Tarefa 1 (simulador no workflow, commit c512442) e Tarefa 2 (primeira pessoa) concluídas e confirmadas no celular.
 
 ## Próxima tarefa
-Confirmar a Tarefa 2. Depois: Tarefa 3, escala e árvores (precisa de scripts/world_trees.gd e de um print das árvores).
+Confirmar a Tarefa 3 (Validate, Build APK, Simulador com 0 árvores fora da escala, e teste no celular). Depois: textura de foto CC0 do chão (roadmap item 4).

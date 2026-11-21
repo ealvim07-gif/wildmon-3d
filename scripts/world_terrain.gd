@@ -8,9 +8,16 @@ const FLAT_RADIUS := 80.0
 const WATER_LEVEL := -1.35
 const LAKE_CENTER := Vector2(112.0, 0.0)
 const LAKE_RADIUS := 19.0
+const TEXTURE_SIZE := 256 # tamanho da textura procedural (pixels)
+const TEXTURE_REPEAT_M := 4.0 # a textura se repete a cada 4 m
+# Opcional: foto CC0 (Poly Haven / ambientCG). Se estes arquivos existirem, sao usados no lugar da procedural.
+const GRASS_ALBEDO_PATH := "res://assets/terrain/grass_albedo.jpg"
+const GRASS_NORMAL_PATH := "res://assets/terrain/grass_normal.jpg"
 var height_noise := FastNoiseLite.new()
 var lake_noise := FastNoiseLite.new()
-var grass_texture: ImageTexture
+var tint_noise := FastNoiseLite.new()
+var grass_texture: Texture2D
+var grass_normal: Texture2D
 
 func _make_marker_rock(position_x: float, position_z: float, size: Vector3) -> void:
 	var rock := MeshInstance3D.new()
@@ -38,7 +45,11 @@ func _ready() -> void:
 	lake_noise.seed = 823
 	lake_noise.frequency = 0.012
 	lake_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	grass_texture = ImageTexture.create_from_image(_make_grass_texture())
+	tint_noise.seed = 5521
+	tint_noise.frequency = 0.018
+	tint_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	tint_noise.fractal_octaves = 2
+	_load_grass_textures()
 	_build_chunks()
 	_diagnose_terrain_cover()
 	_adjust_directional_light_bias()
@@ -60,7 +71,86 @@ func height_at(x: float, z: float) -> float:
 	var basin := -0.8 * basin_mask
 	return (hills + basin + hill_a + hill_b + lake_basin) * fade
 
+func _load_grass_textures() -> void:
+	# 1) Se existir uma foto CC0 em assets/terrain/, usa ela.
+	if ResourceLoader.exists(GRASS_ALBEDO_PATH):
+		var photo = load(GRASS_ALBEDO_PATH)
+		if photo is Texture2D:
+			grass_texture = photo
+			if ResourceLoader.exists(GRASS_NORMAL_PATH):
+				var normal_photo = load(GRASS_NORMAL_PATH)
+				if normal_photo is Texture2D:
+					grass_normal = normal_photo
+			print("[TERRAIN] Textura do chao: foto ", GRASS_ALBEDO_PATH)
+			return
+	# 2) Senao, gera a textura procedural melhorada (sem emendas).
+	grass_texture = ImageTexture.create_from_image(_make_grass_texture())
+	print("[TERRAIN] Textura do chao: procedural melhorada")
+
+func _tint_at(x: float, z: float) -> Color:
+	# Variacao de cor em escala grande (dezenas de metros), para quebrar a repeticao da textura.
+	var u := tint_noise.get_noise_2d(x, z) * 0.5 + 0.5
+	return Color(0.80, 0.88, 0.72).lerp(Color(1.0, 1.0, 0.96), clampf(u, 0.0, 1.0))
+
+func _seamless_layer(seed_value: int, frequency: float, octaves: int) -> PackedByteArray:
+	var n := FastNoiseLite.new()
+	n.seed = seed_value
+	n.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	n.frequency = frequency
+	n.fractal_octaves = octaves
+	var img := n.get_seamless_image(TEXTURE_SIZE, TEXTURE_SIZE)
+	if img == null:
+		return PackedByteArray()
+	img.convert(Image.FORMAT_L8)
+	return img.get_data()
+
 func _make_grass_texture() -> Image:
+	var size := TEXTURE_SIZE
+	var total := size * size
+	var broad := _seamless_layer(418, 0.012, 2)
+	var mid := _seamless_layer(733, 0.045, 3)
+	var fine := _seamless_layer(991, 0.16, 2)
+	if broad.size() != total or mid.size() != total or fine.size() != total:
+		print("[TERRAIN] Textura nova indisponivel, usando a antiga")
+		return _make_grass_texture_legacy()
+	var data := PackedByteArray()
+	data.resize(total * 4)
+	var c_dark := Color(0.16, 0.30, 0.08)
+	var c_mid := Color(0.31, 0.50, 0.16)
+	var c_light := Color(0.52, 0.66, 0.27)
+	var c_dry := Color(0.58, 0.54, 0.26)
+	var c_dirt := Color(0.34, 0.26, 0.14)
+	for y in range(size):
+		for x in range(size):
+			var i := y * size + x
+			var b := float(broad[i]) / 255.0
+			var m := float(mid[i]) / 255.0
+			var f := float(fine[i]) / 255.0
+			var t := clampf(0.15 + m * 0.65 + (f - 0.5) * 0.55, 0.0, 1.0)
+			var col: Color
+			if t < 0.5:
+				col = c_dark.lerp(c_mid, t * 2.0)
+			else:
+				col = c_mid.lerp(c_light, (t - 0.5) * 2.0)
+			# Manchas de grama seca e pequenos trechos de terra, em escala grande.
+			col = col.lerp(c_dry, smoothstep(0.55, 0.9, b) * 0.55)
+			col = col.lerp(c_dirt, smoothstep(0.78, 0.95, b * 0.6 + f * 0.4) * 0.6)
+			# Pontinhos claros e escuros isolados, parecendo folhas de grama.
+			var h := fposmod(sin(float(x) * 12.9898 + float(y) * 78.233) * 43758.5453, 1.0)
+			if h > 0.965:
+				col = col.lightened(0.18)
+			elif h < 0.04:
+				col = col.darkened(0.22)
+			var j := i * 4
+			data[j] = int(clampf(col.r, 0.0, 1.0) * 255.0)
+			data[j + 1] = int(clampf(col.g, 0.0, 1.0) * 255.0)
+			data[j + 2] = int(clampf(col.b, 0.0, 1.0) * 255.0)
+			data[j + 3] = 255
+	var image := Image.create_from_data(size, size, false, Image.FORMAT_RGBA8, data)
+	image.generate_mipmaps()
+	return image
+
+func _make_grass_texture_legacy() -> Image:
 	var image := Image.create(256,256,false,Image.FORMAT_RGBA8)
 	var broad:=FastNoiseLite.new(); broad.seed=418; broad.frequency=0.035
 	var detail:=FastNoiseLite.new(); detail.seed=733; detail.frequency=0.19
@@ -109,15 +199,19 @@ func _build_chunk(ox:float,oz:float) -> void:
 			var b:=Vector3(x1,height_at(x1,z0),z0)
 			var c:=Vector3(x0,height_at(x0,z1),z1)
 			var d:=Vector3(x1,height_at(x1,z1),z1)
+			var ta:=_tint_at(x0,z0)
+			var tb:=_tint_at(x1,z0)
+			var tc:=_tint_at(x0,z1)
+			var td:=_tint_at(x1,z1)
 			# UVs em coordenadas de mundo: textura repetida aproximadamente a cada 4 m.
 			# Normais calculadas pelo gradiente para evitar faces escuras/facetadas.
 			# Ordem horaria vista de cima (frente da face = para cima), exigida pela colisao do Godot.
-			st.set_uv(Vector2(x0 / 4.0, z0 / 4.0)); st.set_normal(_terrain_normal(x0,z0)); st.add_vertex(a)
-			st.set_uv(Vector2(x1 / 4.0, z0 / 4.0)); st.set_normal(_terrain_normal(x1,z0)); st.add_vertex(b)
-			st.set_uv(Vector2(x0 / 4.0, z1 / 4.0)); st.set_normal(_terrain_normal(x0,z1)); st.add_vertex(c)
-			st.set_uv(Vector2(x1 / 4.0, z0 / 4.0)); st.set_normal(_terrain_normal(x1,z0)); st.add_vertex(b)
-			st.set_uv(Vector2(x1 / 4.0, z1 / 4.0)); st.set_normal(_terrain_normal(x1,z1)); st.add_vertex(d)
-			st.set_uv(Vector2(x0 / 4.0, z1 / 4.0)); st.set_normal(_terrain_normal(x0,z1)); st.add_vertex(c)
+			st.set_uv(Vector2(x0 / 4.0, z0 / 4.0)); st.set_color(ta); st.set_normal(_terrain_normal(x0,z0)); st.add_vertex(a)
+			st.set_uv(Vector2(x1 / 4.0, z0 / 4.0)); st.set_color(tb); st.set_normal(_terrain_normal(x1,z0)); st.add_vertex(b)
+			st.set_uv(Vector2(x0 / 4.0, z1 / 4.0)); st.set_color(tc); st.set_normal(_terrain_normal(x0,z1)); st.add_vertex(c)
+			st.set_uv(Vector2(x1 / 4.0, z0 / 4.0)); st.set_color(tb); st.set_normal(_terrain_normal(x1,z0)); st.add_vertex(b)
+			st.set_uv(Vector2(x1 / 4.0, z1 / 4.0)); st.set_color(td); st.set_normal(_terrain_normal(x1,z1)); st.add_vertex(d)
+			st.set_uv(Vector2(x0 / 4.0, z1 / 4.0)); st.set_color(tc); st.set_normal(_terrain_normal(x0,z1)); st.add_vertex(c)
 	var mesh:=st.commit()
 	var ground:=MeshInstance3D.new()
 	ground.mesh=mesh
@@ -125,10 +219,14 @@ func _build_chunk(ox:float,oz:float) -> void:
 	var mat:=StandardMaterial3D.new()
 	mat.albedo_texture=grass_texture
 	mat.roughness=1.0
-	mat.texture_filter=BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	mat.texture_filter=BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	mat.vertex_color_use_as_albedo = true
 	mat.uv1_triplanar = true
 	mat.uv1_world_triplanar = true
-	mat.uv1_scale = Vector3(0.25,0.25,0.25)
+	mat.uv1_scale = Vector3(1.0 / TEXTURE_REPEAT_M, 1.0 / TEXTURE_REPEAT_M, 1.0 / TEXTURE_REPEAT_M)
+	if grass_normal != null:
+		mat.normal_enabled = true
+		mat.normal_texture = grass_normal
 	mat.albedo_color=Color(1.0,1.0,1.0)
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mat.roughness=1.0

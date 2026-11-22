@@ -1,5 +1,5 @@
 extends Node3D
-# Terreno procedural infinito (Etapa 2): WORLD_SEED, height_at sem limites e ChunkManager dinamico.
+# Terreno procedural infinito (Etapa 4): agua infinita seguindo o jogador, neblina e chunks dinamicos.
 const DEBUG_TERRAIN_UNSHADED := false
 const WORLD_SEED := 82471
 const CHUNK_SIZE := 32.0
@@ -10,6 +10,10 @@ const WATER_LEVEL := -1.35
 const LAKE_CENTER := Vector2(112.0, 0.0)
 const LAKE_RADIUS := 19.0
 const TEXTURE_SIZE := 256
+
+# --- Agua infinita acompanhando o jogador ---
+const INFINITE_WATER_SPAN := 280.0
+const INFINITE_WATER_SNAP := 8.0
 
 # --- Cache de altura apenas dentro da area inicial gerada ---
 const CACHE_HALF_EXTENT := 128.0
@@ -26,10 +30,11 @@ const SNOW_ALTITUDE_START := 2.2
 const SNOW_ALTITUDE_END := 3.6
 const TERRAIN_CONTRAST := 1.05
 
-# --- Neblina Atmosferica ---
+# --- Neblina Atmosferica e corte de visao (esconde surgimento de chunks) ---
 const HORIZON_FOG_COLOR := Color(0.69, 0.86, 0.98)
-const FOG_START_M := 58.0
-const FOG_END_M := 118.0
+const FOG_START_M := 62.0
+const FOG_END_M := 116.0
+const CAMERA_FAR_M := 128.0
 
 # --- Paleta procedural de reserva ---
 const SOIL_DARK := Color(0.24, 0.34, 0.16)
@@ -52,7 +57,8 @@ var tex_snow: Texture2D
 var tex_forest: Texture2D
 var _loaded_texture_names: Array[String] = []
 
-var chunk_manager: ChunkManager
+var chunk_manager: Node3D
+var water_plane: MeshInstance3D
 
 func _ensure_noises_initialized() -> void:
 	if _noises_ready:
@@ -79,24 +85,31 @@ func _ready() -> void:
 	_load_terrain_textures()
 
 	var shared_terrain_mat := _make_terrain_blend_material()
-	chunk_manager = ChunkManager.new()
-	chunk_manager.name = "ChunkManager"
-	chunk_manager.setup(self, shared_terrain_mat, WORLD_SEED)
-	add_child(chunk_manager)
+	var chunk_manager_script := load("res://scripts/chunk_manager.gd") as GDScript
+	if chunk_manager_script != null:
+		chunk_manager = chunk_manager_script.new()
+		chunk_manager.name = "ChunkManager"
+		chunk_manager.call("setup", self, shared_terrain_mat, WORLD_SEED)
+		add_child(chunk_manager)
 
-	# Gera imediatamente os chunks sob o spawn do jogador antes de liberar o movimento
 	var spawn_pos := _find_focus_position()
-	chunk_manager.ensure_initial_chunks_around(spawn_pos, 1)
+	if chunk_manager != null:
+		chunk_manager.call("ensure_initial_chunks_around", spawn_pos, 1)
 	_cache_active = true
 
-	_build_lake()
+	_build_infinite_water()
+	_update_water_follow(spawn_pos)
 	_build_clouds()
 	_setup_atmosphere_fog()
+	_sync_camera_clip_and_fog()
 	_adjust_directional_light_bias()
 
 func _process(_delta: float) -> void:
+	var focus := _find_focus_position()
 	if chunk_manager != null:
-		chunk_manager.update_around(_find_focus_position())
+		chunk_manager.call("update_around", focus)
+	_update_water_follow(focus)
+	_sync_camera_clip_and_fog()
 
 func _find_focus_position() -> Vector3:
 	var root := get_parent()
@@ -123,7 +136,7 @@ func _compute_height_formula(x: float, z: float) -> float:
 	var hill_a := 3.8 * exp(-d_a * 2.0)
 	var hill_b := 3.5 * exp(-d_b * 2.0)
 	var basin_mask := smoothstep(0.50, 0.68, lake_noise.get_noise_2d(x, z))
-	var basin := -0.8 * basin_mask
+	var basin := -1.85 * basin_mask
 	return (hills + basin + hill_a + hill_b + lake_basin) * fade
 
 func height_at(x: float, z: float) -> float:
@@ -324,6 +337,58 @@ void fragment() {
 	sm.set_shader_parameter("u_contrast", TERRAIN_CONTRAST)
 	return sm
 
+func _build_infinite_water() -> void:
+	# Plano de agua infinito que acompanha (x, z) do jogador na altura WATER_LEVEL, sem colisao.
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(INFINITE_WATER_SPAN, INFINITE_WATER_SPAN)
+	plane.subdivide_width = 32
+	plane.subdivide_depth = 32
+
+	water_plane = MeshInstance3D.new()
+	water_plane.name = "InfiniteWaterPlane"
+	water_plane.mesh = plane
+	water_plane.position = Vector3(0.0, WATER_LEVEL, 0.0)
+	water_plane.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+	var sm := ShaderMaterial.new()
+	var shader := Shader.new()
+	shader.code = """
+shader_type spatial;
+render_mode unshaded, cull_disabled;
+
+varying vec3 v_world_pos;
+
+void vertex() {
+	v_world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+}
+
+void fragment() {
+	vec2 wz = v_world_pos.xz;
+	vec2 uv1 = wz * 0.28 + vec2(TIME * 0.08, TIME * 0.05);
+	vec2 uv2 = wz * 0.52 + vec2(-TIME * 0.06, TIME * 0.09);
+	float wave = sin(uv1.x * 6.28) * cos(uv1.y * 6.28) * 0.5 + sin((uv2.x + uv2.y) * 6.28) * 0.5;
+
+	vec3 shallow_col = vec3(0.24, 0.72, 0.74);
+	vec3 deep_col = vec3(0.09, 0.42, 0.62);
+	float ripple_mix = clamp(0.45 + wave * 0.25, 0.0, 1.0);
+	vec3 base_col = mix(shallow_col, deep_col, ripple_mix);
+	base_col += wave * 0.03;
+
+	float shimmer = smoothstep(0.68, 0.95, wave * 0.5 + 0.5);
+	ALBEDO = mix(base_col, vec3(0.86, 0.95, 0.98), shimmer * 0.35);
+}
+"""
+	sm.shader = shader
+	water_plane.material_override = sm
+	add_child(water_plane)
+
+func _update_water_follow(focus: Vector3) -> void:
+	if water_plane == null:
+		return
+	var snapped_x := roundf(focus.x / INFINITE_WATER_SNAP) * INFINITE_WATER_SNAP
+	var snapped_z := roundf(focus.z / INFINITE_WATER_SNAP) * INFINITE_WATER_SNAP
+	water_plane.global_position = Vector3(snapped_x, WATER_LEVEL, snapped_z)
+
 func _build_clouds() -> void:
 	var dome := MeshInstance3D.new()
 	dome.name = "StylizedCloudDome"
@@ -432,6 +497,11 @@ func _setup_atmosphere_fog() -> void:
 	env.fog_depth_end = FOG_END_M
 	env.fog_sky_affect = 0.0
 
+func _sync_camera_clip_and_fog() -> void:
+	var cam := get_viewport().get_camera_3d()
+	if cam != null and not is_equal_approx(cam.far, CAMERA_FAR_M):
+		cam.far = CAMERA_FAR_M
+
 func _find_world_environment(node: Node) -> WorldEnvironment:
 	if node is WorldEnvironment:
 		return node
@@ -455,74 +525,3 @@ func _find_directional_lights(node: Node) -> Array:
 	for child in node.get_children():
 		found.append_array(_find_directional_lights(child))
 	return found
-
-func _build_lake() -> void:
-	var lake_span := LAKE_RADIUS + 4.5
-	var grid := 28
-	var step := (lake_span * 2.0) / float(grid)
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-
-	for gz in range(grid):
-		for gx in range(grid):
-			var x0 := LAKE_CENTER.x - lake_span + float(gx) * step
-			var z0 := LAKE_CENTER.y - lake_span + float(gz) * step
-			var x1 := x0 + step
-			var z1 := z0 + step
-
-			var c00 := _water_vertex_color(x0, z0)
-			var c10 := _water_vertex_color(x1, z0)
-			var c01 := _water_vertex_color(x0, z1)
-			var c11 := _water_vertex_color(x1, z1)
-
-			var v00 := Vector3(x0, WATER_LEVEL, z0)
-			var v10 := Vector3(x1, WATER_LEVEL, z0)
-			var v01 := Vector3(x0, WATER_LEVEL, z1)
-			var v11 := Vector3(x1, WATER_LEVEL, z1)
-
-			st.set_uv(Vector2(x0 * 0.15, z0 * 0.15)); st.set_color(c00); st.set_normal(Vector3.UP); st.add_vertex(v00)
-			st.set_uv(Vector2(x1 * 0.15, z0 * 0.15)); st.set_color(c10); st.set_normal(Vector3.UP); st.add_vertex(v10)
-			st.set_uv(Vector2(x0 * 0.15, z1 * 0.15)); st.set_color(c01); st.set_normal(Vector3.UP); st.add_vertex(v01)
-
-			st.set_uv(Vector2(x1 * 0.15, z0 * 0.15)); st.set_color(c10); st.set_normal(Vector3.UP); st.add_vertex(v10)
-			st.set_uv(Vector2(x1 * 0.15, z1 * 0.15)); st.set_color(c11); st.set_normal(Vector3.UP); st.add_vertex(v11)
-			st.set_uv(Vector2(x0 * 0.15, z1 * 0.15)); st.set_color(c01); st.set_normal(Vector3.UP); st.add_vertex(v01)
-
-	var water := MeshInstance3D.new()
-	water.name = "MainLakeWater"
-	water.mesh = st.commit()
-	water.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-
-	var sm := ShaderMaterial.new()
-	var shader := Shader.new()
-	shader.code = """
-shader_type spatial;
-render_mode unshaded, cull_disabled;
-
-void fragment() {
-	float shore = COLOR.r;
-	float depth_factor = COLOR.g;
-
-	vec2 uv1 = UV * 3.5 + vec2(TIME * 0.08, TIME * 0.05);
-	vec2 uv2 = UV * 6.0 + vec2(-TIME * 0.06, TIME * 0.09);
-	float wave = sin(uv1.x * 6.28) * cos(uv1.y * 6.28) * 0.5 + sin((uv2.x + uv2.y) * 6.28) * 0.5;
-
-	vec3 shallow_col = vec3(0.24, 0.72, 0.74);
-	vec3 deep_col = vec3(0.08, 0.38, 0.58);
-	vec3 base_col = mix(shallow_col, deep_col, depth_factor);
-	base_col += wave * 0.035;
-
-	float foam_line = smoothstep(0.45, 0.92, shore + wave * 0.12);
-	ALBEDO = mix(base_col, vec3(0.88, 0.96, 0.98), foam_line * 0.68);
-}
-"""
-	sm.shader = shader
-	water.material_override = sm
-	add_child(water)
-
-func _water_vertex_color(x: float, z: float) -> Color:
-	var ground_y := height_at(x, z)
-	var depth := maxf(0.0, WATER_LEVEL - ground_y)
-	var shore := 1.0 - clampf(depth / 0.55, 0.0, 1.0)
-	var depth_factor := clampf(depth / 1.8, 0.0, 1.0)
-	return Color(shore, depth_factor, 0.0, 1.0)

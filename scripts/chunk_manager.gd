@@ -1,16 +1,35 @@
 extends Node3D
 class_name ChunkManager
-# Gerenciador dinamico de chunks de 32 m com arvores e grama deterministicas por chunk (Etapa 3).
+# Gerenciador dinamico de chunks de 32 m com arvores e grama deterministicas por bioma e modelos 3D reais.
 
 const CHUNK_SIZE := 32.0
 const CELLS := 12
 const CHUNK_VIEW_RADIUS := 4
 const MAX_CHUNKS_PER_FRAME := 1
 
-# --- Contrato de vegetacao por chunk (Etapa 3) ---
+# --- Contrato de vegetacao por chunk ---
 const MAX_TREES_PER_CHUNK := 20
 const MAX_GRASS_PER_CHUNK := 1500
 const GRASS_CHUNK_MAX_DIST := 3 # Apenas chunks com distancia < 3 exibem tufos de grama
+
+const DECIDUOUS_CANDIDATES := [
+	"CommonTree_1",
+	"CommonTree_2",
+	"CommonTree_3",
+	"CommonTree_4",
+	"CommonTree_5",
+	"BirchTree_1",
+	"BirchTree_2",
+	"BirchTree_3"
+]
+
+const PINE_CANDIDATES := [
+	"Pine_1",
+	"Pine_2",
+	"Pine_3",
+	"Pine_4",
+	"Pine_5"
+]
 
 var _terrain: Node3D
 var _shared_material: Material
@@ -20,14 +39,55 @@ var _chunk_grass_nodes: Dictionary = {} # Vector2i -> MultiMeshInstance3D
 var _last_center_chunk := Vector2i(999999, 999999)
 
 var _shared_grass_mesh: ArrayMesh
-var _shared_trunk_mesh: CylinderMesh
-var _shared_canopy_mesh: SphereMesh
+var _deciduous_templates: Array[Node3D] = []
+var _pine_templates: Array[Node3D] = []
+var _fallback_trunk_mesh: CylinderMesh
+var _fallback_canopy_mesh: SphereMesh
+var _fallback_pine_mesh: CylinderMesh
 
 func setup(terrain: Node3D, shared_material: Material, world_seed: int = 82471) -> void:
 	_terrain = terrain
 	_shared_material = shared_material
 	_world_seed = world_seed
+	_load_tree_templates()
 	_build_shared_vegetation_meshes()
+
+func _load_tree_templates() -> void:
+	_deciduous_templates.clear()
+	_pine_templates.clear()
+	for model_name in DECIDUOUS_CANDIDATES:
+		var inst := _try_load_tree_model(model_name)
+		if inst != null:
+			_deciduous_templates.append(inst)
+	for model_name in PINE_CANDIDATES:
+		var inst := _try_load_tree_model(model_name)
+		if inst != null:
+			_pine_templates.append(inst)
+
+func _try_load_tree_model(model_name: String) -> Node3D:
+	var paths := [
+		"res://assets/nature/" + model_name + ".gltf",
+		"res://assets/nature/" + model_name + ".glb",
+		"res://assets/gobkit/" + model_name + ".glb",
+		"res://assets/gobkit/" + model_name + ".gltf"
+	]
+	for path in paths:
+		if ResourceLoader.exists(path):
+			var scene := load(path) as PackedScene
+			if scene != null:
+				var inst := scene.instantiate() as Node3D
+				if inst != null:
+					_prepare_tree_template(inst)
+					return inst
+	return null
+
+func _prepare_tree_template(node: Node) -> void:
+	if node is GeometryInstance3D:
+		var geom := node as GeometryInstance3D
+		geom.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		geom.visibility_range_end = 115.0
+	for child in node.get_children():
+		_prepare_tree_template(child)
 
 func world_to_chunk(world_pos: Vector3) -> Vector2i:
 	return Vector2i(
@@ -46,16 +106,20 @@ func has_chunk_at_world_pos(world_pos: Vector3) -> bool:
 	return _active_chunks.has(world_to_chunk(world_pos))
 
 func _chunk_seed(coord: Vector2i) -> int:
-	# Hash deterministico combinando WORLD_SEED + coordenadas do chunk
 	var h := int(_world_seed)
 	h = int((h ^ (coord.x * 73856093)) * 19349663)
 	h = int((h ^ (coord.y * 83492791)) * 2971215073)
 	return absi(h)
 
-func compute_chunk_tree_positions(coord: Vector2i) -> Array[Transform3D]:
-	var transforms: Array[Transform3D] = []
+func _get_biome_at(wx: float, wz: float) -> String:
+	if _terrain != null and _terrain.has_method("get_biome"):
+		return str(_terrain.call("get_biome", wx, wz))
+	return "prado"
+
+func compute_chunk_tree_spawns(coord: Vector2i) -> Array[Dictionary]:
+	var spawns: Array[Dictionary] = []
 	if _terrain == null:
-		return transforms
+		return spawns
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = _chunk_seed(coord) ^ 0x4A1B
@@ -63,12 +127,23 @@ func compute_chunk_tree_positions(coord: Vector2i) -> Array[Transform3D]:
 	var ox := float(coord.x) * CHUNK_SIZE
 	var oz := float(coord.y) * CHUNK_SIZE
 	var water_level: float = _terrain.WATER_LEVEL if _terrain.get("WATER_LEVEL") != null else -1.35
-	var target_count := rng.randi_range(4, MAX_TREES_PER_CHUNK)
+
+	var center_biome := _get_biome_at(ox + CHUNK_SIZE * 0.5, oz + CHUNK_SIZE * 0.5)
+	var max_for_biome := 6
+	match center_biome:
+		"floresta":
+			max_for_biome = MAX_TREES_PER_CHUNK
+		"montanha", "montanha_nevada":
+			max_for_biome = 10
+		"lago", "praia":
+			max_for_biome = 2
+		_:
+			max_for_biome = 6
 
 	var placed_points: Array[Vector2] = []
-	var attempts := target_count * 4
+	var attempts := MAX_TREES_PER_CHUNK * 4
 	for _i in range(attempts):
-		if transforms.size() >= MAX_TREES_PER_CHUNK or transforms.size() >= target_count:
+		if spawns.size() >= MAX_TREES_PER_CHUNK or spawns.size() >= max_for_biome:
 			break
 		var lx := rng.randf_range(1.5, CHUNK_SIZE - 1.5)
 		var lz := rng.randf_range(1.5, CHUNK_SIZE - 1.5)
@@ -81,31 +156,67 @@ func compute_chunk_tree_positions(coord: Vector2i) -> Array[Transform3D]:
 			continue
 
 		var wy: float = _terrain.height_at(wx, wz)
-		if wy < water_level + 0.30:
+		if wy < water_level + 0.35:
 			continue
 
-		# Evita arvores coladas umas nas outras
+		var biome := _get_biome_at(wx, wz)
+		if biome == "lago" or biome == "praia":
+			continue
+
+		var density_chance := 0.35
+		var is_pine := false
+		var min_dist_sq := 22.0
+		var scale_min := 1.05
+		var scale_max := 1.48
+
+		match biome:
+			"floresta":
+				density_chance = 0.92
+				is_pine = rng.randf() < 0.25
+				min_dist_sq = 14.0
+				scale_min = 1.15
+				scale_max = 1.65
+			"montanha", "montanha_nevada":
+				density_chance = 0.55
+				is_pine = true
+				min_dist_sq = 18.0
+				scale_min = 1.10
+				scale_max = 1.55
+			_:
+				density_chance = 0.28
+				is_pine = rng.randf() < 0.15
+				min_dist_sq = 28.0
+				scale_min = 1.00
+				scale_max = 1.40
+
+		if rng.randf() > density_chance:
+			continue
+
 		var too_close := false
 		for prev in placed_points:
-			if prev.distance_squared_to(p2) < 16.0:
+			if prev.distance_squared_to(p2) < min_dist_sq:
 				too_close = true
 				break
 		if too_close:
 			continue
 
 		placed_points.append(p2)
-		var scale_xz := rng.randf_range(0.85, 1.35)
-		var scale_y := rng.randf_range(0.90, 1.45)
+		var scale_factor := rng.randf_range(scale_min, scale_max)
 		var yaw := rng.randf() * TAU
-		var t := Transform3D().scaled(Vector3(scale_xz, scale_y, scale_xz)).rotated(Vector3.UP, yaw)
-		t.origin = Vector3(wx, wy - 0.08, wz)
-		transforms.append(t)
+		var variant_idx := rng.randi()
+		spawns.append({
+			"pos": Vector3(wx, wy - 0.06, wz),
+			"scale": Vector3.ONE * scale_factor,
+			"yaw": yaw,
+			"variant": variant_idx,
+			"pine": is_pine,
+			"biome": biome
+		})
 
-	return transforms
+	return spawns
 
 func generate_chunk_population_preview(coord: Vector2i) -> Dictionary:
-	# Usado pelo simulador para validar determinismo sem depender da fila assincrona
-	var trees := compute_chunk_tree_positions(coord)
+	var trees := compute_chunk_tree_spawns(coord)
 	return {
 		"trees": trees.size(),
 		"max_trees": MAX_TREES_PER_CHUNK,
@@ -238,7 +349,6 @@ func _create_chunk(coord: Vector2i, current_center: Vector2i) -> void:
 	body.add_child(cs)
 	chunk_root.add_child(body)
 
-	# Vegetacao deterministica do chunk (apagada automaticamente junto com chunk_root)
 	_populate_chunk_trees(chunk_root, coord)
 	var grass_mmi := _populate_chunk_grass(chunk_root, coord)
 	var dist := maxi(absi(coord.x - current_center.x), absi(coord.y - current_center.y))
@@ -249,47 +359,49 @@ func _create_chunk(coord: Vector2i, current_center: Vector2i) -> void:
 	_active_chunks[coord] = chunk_root
 
 func _populate_chunk_trees(chunk_root: Node3D, coord: Vector2i) -> void:
-	var tree_transforms := compute_chunk_tree_positions(coord)
-	if tree_transforms.is_empty():
+	var tree_spawns := compute_chunk_tree_spawns(coord)
+	if tree_spawns.is_empty():
 		return
 
-	var count := tree_transforms.size()
+	var trees_container := Node3D.new()
+	trees_container.name = "ChunkTrees"
+	chunk_root.add_child(trees_container)
 
-	var trunk_mm := MultiMesh.new()
-	trunk_mm.transform_format = MultiMesh.TRANSFORM_3D
-	trunk_mm.mesh = _shared_trunk_mesh
-	trunk_mm.instance_count = count
+	for item in tree_spawns:
+		var wants_pine: bool = bool(item.get("pine", false))
+		var pool := _pine_templates if (wants_pine and not _pine_templates.is_empty()) else _deciduous_templates
+		if pool.is_empty() and not _pine_templates.is_empty():
+			pool = _pine_templates
 
-	var canopy_mm := MultiMesh.new()
-	canopy_mm.transform_format = MultiMesh.TRANSFORM_3D
-	canopy_mm.use_colors = true
-	canopy_mm.mesh = _shared_canopy_mesh
-	canopy_mm.instance_count = count
+		if not pool.is_empty():
+			var variant: int = int(item["variant"]) % pool.size()
+			var tree_node := pool[variant].duplicate() as Node3D
+			tree_node.position = item["pos"]
+			tree_node.scale = item["scale"]
+			tree_node.rotation.y = float(item["yaw"])
+			trees_container.add_child(tree_node)
+		else:
+			_add_fallback_tree(trees_container, item)
 
-	var rng := RandomNumberGenerator.new()
-	rng.seed = _chunk_seed(coord) ^ 0x77E1
+func _add_fallback_tree(parent: Node3D, item: Dictionary) -> void:
+	var holder := Node3D.new()
+	holder.position = item["pos"]
+	holder.scale = item["scale"]
+	holder.rotation.y = float(item["yaw"])
 
-	for i in range(count):
-		var base_t := tree_transforms[i]
-		var trunk_t := base_t.translated_local(Vector3(0.0, 1.4, 0.0))
-		trunk_mm.set_instance_transform(i, trunk_t)
+	var trunk := MeshInstance3D.new()
+	trunk.mesh = _fallback_trunk_mesh
+	trunk.position = Vector3(0.0, 1.8, 0.0)
+	trunk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	holder.add_child(trunk)
 
-		var canopy_t := base_t.translated_local(Vector3(0.0, 3.6, 0.0))
-		canopy_mm.set_instance_transform(i, canopy_t)
-		var leaf_tint := Color(0.22, 0.45, 0.16).lerp(Color(0.36, 0.58, 0.21), rng.randf())
-		canopy_mm.set_instance_color(i, leaf_tint)
+	var crown := MeshInstance3D.new()
+	crown.mesh = _fallback_pine_mesh if bool(item.get("pine", false)) else _fallback_canopy_mesh
+	crown.position = Vector3(0.0, 4.2, 0.0)
+	crown.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	holder.add_child(crown)
 
-	var trunk_mmi := MultiMeshInstance3D.new()
-	trunk_mmi.name = "ChunkTrunks"
-	trunk_mmi.multimesh = trunk_mm
-	trunk_mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	chunk_root.add_child(trunk_mmi)
-
-	var canopy_mmi := MultiMeshInstance3D.new()
-	canopy_mmi.name = "ChunkCanopies"
-	canopy_mmi.multimesh = canopy_mm
-	canopy_mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	chunk_root.add_child(canopy_mmi)
+	parent.add_child(holder)
 
 func _populate_chunk_grass(chunk_root: Node3D, coord: Vector2i) -> MultiMeshInstance3D:
 	var rng := RandomNumberGenerator.new()
@@ -306,7 +418,13 @@ func _populate_chunk_grass(chunk_root: Node3D, coord: Vector2i) -> MultiMeshInst
 		var wx := ox + rng.randf_range(0.2, CHUNK_SIZE - 0.2)
 		var wz := oz + rng.randf_range(0.2, CHUNK_SIZE - 0.2)
 		var wy: float = _terrain.height_at(wx, wz)
-		if wy < water_level + 0.14:
+		if wy < water_level + 0.18:
+			continue
+
+		var biome := _get_biome_at(wx, wz)
+		if biome == "lago" or biome == "praia" or biome == "montanha_nevada":
+			continue
+		if biome == "montanha" and rng.randf() > 0.35:
 			continue
 
 		var sc_xz := rng.randf_range(0.75, 1.15)
@@ -315,7 +433,11 @@ func _populate_chunk_grass(chunk_root: Node3D, coord: Vector2i) -> MultiMeshInst
 		var t := Transform3D().scaled(Vector3(sc_xz, sc_y, sc_xz)).rotated(Vector3.UP, yaw)
 		t.origin = Vector3(wx, wy - 0.03, wz)
 		transforms.append(t)
-		colors.append(Color(0.86, 0.95, 0.76).lerp(Color(1.04, 1.00, 0.80), rng.randf()))
+
+		var col := Color(0.86, 0.95, 0.76).lerp(Color(1.04, 1.00, 0.80), rng.randf())
+		if biome == "floresta":
+			col = Color(0.68, 0.84, 0.60).lerp(Color(0.82, 0.92, 0.68), rng.randf())
+		colors.append(col)
 
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -334,28 +456,36 @@ func _populate_chunk_grass(chunk_root: Node3D, coord: Vector2i) -> MultiMeshInst
 	return mmi
 
 func _build_shared_vegetation_meshes() -> void:
-	# Tronco e copa estilizados leves para instanciamento em massa
-	_shared_trunk_mesh = CylinderMesh.new()
-	_shared_trunk_mesh.top_radius = 0.22
-	_shared_trunk_mesh.bottom_radius = 0.34
-	_shared_trunk_mesh.height = 2.8
-	_shared_trunk_mesh.radial_segments = 6
+	_fallback_trunk_mesh = CylinderMesh.new()
+	_fallback_trunk_mesh.top_radius = 0.16
+	_fallback_trunk_mesh.bottom_radius = 0.26
+	_fallback_trunk_mesh.height = 3.6
+	_fallback_trunk_mesh.radial_segments = 7
 	var trunk_mat := StandardMaterial3D.new()
 	trunk_mat.albedo_color = Color(0.36, 0.24, 0.14)
 	trunk_mat.roughness = 0.95
-	_shared_trunk_mesh.material = trunk_mat
+	_fallback_trunk_mesh.material = trunk_mat
 
-	_shared_canopy_mesh = SphereMesh.new()
-	_shared_canopy_mesh.radius = 1.65
-	_shared_canopy_mesh.height = 2.8
-	_shared_canopy_mesh.radial_segments = 8
-	_shared_canopy_mesh.rings = 5
+	_fallback_canopy_mesh = SphereMesh.new()
+	_fallback_canopy_mesh.radius = 1.45
+	_fallback_canopy_mesh.height = 2.6
+	_fallback_canopy_mesh.radial_segments = 8
+	_fallback_canopy_mesh.rings = 5
 	var canopy_mat := StandardMaterial3D.new()
-	canopy_mat.vertex_color_use_as_albedo = true
+	canopy_mat.albedo_color = Color(0.24, 0.46, 0.17)
 	canopy_mat.roughness = 0.9
-	_shared_canopy_mesh.material = canopy_mat
+	_fallback_canopy_mesh.material = canopy_mat
 
-	# Malha estrela de 3 planos cruzados para tufos de grama
+	_fallback_pine_mesh = CylinderMesh.new()
+	_fallback_pine_mesh.top_radius = 0.05
+	_fallback_pine_mesh.bottom_radius = 1.45
+	_fallback_pine_mesh.height = 3.8
+	_fallback_pine_mesh.radial_segments = 7
+	var pine_mat := StandardMaterial3D.new()
+	pine_mat.albedo_color = Color(0.16, 0.34, 0.18)
+	pine_mat.roughness = 0.9
+	_fallback_pine_mesh.material = pine_mat
+
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var half_width := 0.42

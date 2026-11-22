@@ -1,5 +1,5 @@
 extends SceneTree
-# Simulador headless para validar Etapa 1 (altura infinita) e Etapa 2 (ChunkManager dinamico).
+# Simulador headless para validar Etapas 1, 2 e 3 do mundo infinito.
 var failed := false
 
 func _fail(msg: String) -> void:
@@ -55,7 +55,6 @@ func _validate_chunk_manager_stage2(game: Node, terrain: Node) -> void:
 		return
 	_ok("Chunk inicial presente sob o jogador em " + str(start_pos))
 
-	# Simula caminhada de 300 m em linha reta ao longo do eixo +X (60 passos de 5 m)
 	var steps := 60
 	var step_dist := 5.0
 	for s in range(1, steps + 1):
@@ -79,6 +78,27 @@ func _validate_chunk_manager_stage2(game: Node, terrain: Node) -> void:
 
 	_ok("Caminhada de 300 m concluida sem afundar. Chunks ativos finais: " + str(cm.get_active_chunk_count()) + " / max " + str(max_allowed))
 
+func _validate_chunk_vegetation_stage3(terrain: Node) -> void:
+	var cm = terrain.get("chunk_manager")
+	if cm == null or not cm.has_method("generate_chunk_population_preview"):
+		_fail("ChunkManager sem suporte a geracao deterministica de vegetacao (Etapa 3)")
+		return
+
+	var sample_coords: Array[Vector2i] = [
+		Vector2i(2, -1),
+		Vector2i(10, 15),
+		Vector2i(-8, 6)
+	]
+	for coord in sample_coords:
+		var pass1: Dictionary = cm.generate_chunk_population_preview(coord)
+		var pass2: Dictionary = cm.generate_chunk_population_preview(coord)
+		var trees1: int = int(pass1.get("trees", -1))
+		var trees2: int = int(pass2.get("trees", -2))
+		if trees1 != trees2 or trees1 < 0 or trees1 > 20:
+			_fail("Geracao de arvores nao deterministica ou fora do limite [0..20] no chunk " + str(coord) + ": " + str(trees1) + " vs " + str(trees2))
+			return
+		_ok("Chunk " + str(coord) + " deterministico: " + str(trees1) + " arvores (<= 20)")
+
 func _init() -> void:
 	var packed := load("res://scenes/main.tscn") as PackedScene
 	if packed == null:
@@ -101,6 +121,8 @@ func _init() -> void:
 	_validate_infinite_height_stage1(terrain)
 	if not failed:
 		await _validate_chunk_manager_stage2(game, terrain)
+	if not failed:
+		_validate_chunk_vegetation_stage3(terrain)
 
 	var camera := game.get_node_or_null("Player/CameraRig/Camera3D") as Camera3D
 	if camera == null:
@@ -116,5 +138,5 @@ func _init() -> void:
 	if failed:
 		quit(1)
 	else:
-		_ok("Simulacao Etapa 2 concluida com sucesso")
+		_ok("Simulacao Etapa 3 concluida com sucesso")
 		quit(0)

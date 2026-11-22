@@ -2,7 +2,7 @@ name: Build Wildmon 3D Android Beta APK
 
 on:
   push:
-    branches: [main, mundo-vivo]
+    branches: [main, mundo-vivo, mundo-infinito]
   workflow_dispatch:
 
 permissions:

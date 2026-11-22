@@ -1,5 +1,5 @@
 extends SceneTree
-# Simulador headless para validar mundo, terreno infinito (Etapa 1), protagonista e HUD.
+# Simulador headless para validar Etapa 1 (altura infinita) e Etapa 2 (ChunkManager dinamico).
 var failed := false
 
 func _fail(msg: String) -> void:
@@ -37,6 +37,48 @@ func _validate_infinite_height_stage1(terrain: Node) -> void:
 			return
 		_ok("height_at" + str(pt) + " = " + str(snappedf(h1, 0.001)) + " (deterministico)")
 
+func _validate_chunk_manager_stage2(game: Node, terrain: Node) -> void:
+	var cm = terrain.get("chunk_manager")
+	if cm == null:
+		_fail("ChunkManager nao inicializado em world_terrain.gd")
+		return
+
+	var max_allowed: int = cm.max_allowed_chunks()
+	var player := game.get_node_or_null("Player") as CharacterBody3D
+	if player == null:
+		_fail("Jogador nao encontrado para teste de caminhada de 300 m")
+		return
+
+	var start_pos := player.global_position
+	if not cm.has_chunk_at_world_pos(start_pos):
+		_fail("Chunk inicial sob o jogador nao foi gerado antes de liberar o movimento")
+		return
+	_ok("Chunk inicial presente sob o jogador em " + str(start_pos))
+
+	# Simula caminhada de 300 m em linha reta ao longo do eixo +X (60 passos de 5 m)
+	var steps := 60
+	var step_dist := 5.0
+	for s in range(1, steps + 1):
+		var target_x := start_pos.x + float(s) * step_dist
+		var target_z := start_pos.z
+		var ground_y: float = terrain.height_at(target_x, target_z)
+		player.global_position = Vector3(target_x, ground_y + 0.12, target_z)
+		cm.update_around(player.global_position)
+		await process_frame
+
+		var active_now: int = cm.get_active_chunk_count()
+		if active_now > max_allowed:
+			_fail("Chunks ativos (" + str(active_now) + ") ultrapassaram o limite (" + str(max_allowed) + ")")
+			return
+		if not cm.has_chunk_at_world_pos(player.global_position):
+			_fail("Jogador afundaria sem chunk sob os pes em x=" + str(target_x))
+			return
+		if player.global_position.y < ground_y - 0.5:
+			_fail("Jogador afundou abaixo do terreno em x=" + str(target_x))
+			return
+
+	_ok("Caminhada de 300 m concluida sem afundar. Chunks ativos finais: " + str(cm.get_active_chunk_count()) + " / max " + str(max_allowed))
+
 func _init() -> void:
 	var packed := load("res://scenes/main.tscn") as PackedScene
 	if packed == null:
@@ -45,31 +87,34 @@ func _init() -> void:
 		return
 	var game := packed.instantiate()
 	root.add_child(game)
-	await create_timer(0.15).timeout
+	if game.has_method("_start_game"):
+		game.call("_start_game")
+	await create_timer(0.25).timeout
 
-	var terrain := game.get_node_or_null("WorldTerrain")
+	var terrain := game.get_node_or_null("ChunkTerrain")
 	if terrain == null:
 		for child in game.get_children():
 			if child.has_method("height_at"):
 				terrain = child
 				break
-	_validate_infinite_height_stage1(terrain)
 
-	var player := game.get_node_or_null("Player") as CharacterBody3D
-	if player == null:
-		_fail("Jogador nao encontrado")
-		quit(1)
-		return
-	_ok("Jogador instanciado em " + str(player.global_position))
+	_validate_infinite_height_stage1(terrain)
+	if not failed:
+		await _validate_chunk_manager_stage2(game, terrain)
 
 	var camera := game.get_node_or_null("Player/CameraRig/Camera3D") as Camera3D
 	if camera == null:
-		_fail("Camera nao encontrada")
+		for cam in root.find_children("*", "Camera3D", true, false):
+			if (cam as Camera3D).current:
+				camera = cam as Camera3D
+				break
+	if camera == null:
+		_fail("Camera ativa nao encontrada")
 	else:
 		_ok("Camera ativa: " + str(camera.current))
 
 	if failed:
 		quit(1)
 	else:
-		_ok("Simulacao Etapa 1 concluida com sucesso")
+		_ok("Simulacao Etapa 2 concluida com sucesso")
 		quit(0)

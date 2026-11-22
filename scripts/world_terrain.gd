@@ -1,5 +1,5 @@
 extends Node3D
-# Terreno estilizado com WORLD_SEED deterministico, cache local, multi-textura e relva 3D.
+# Terreno procedural infinito (Etapa 2): WORLD_SEED, height_at sem limites e ChunkManager dinamico.
 const DEBUG_TERRAIN_UNSHADED := false
 const WORLD_SEED := 82471
 const CHUNK_SIZE := 32.0
@@ -25,11 +25,6 @@ const SHORE_SAND_BAND := 1.45
 const SNOW_ALTITUDE_START := 2.2
 const SNOW_ALTITUDE_END := 3.6
 const TERRAIN_CONTRAST := 1.05
-
-# --- Configuracao da Grama 3D Dinamica ---
-const GRASS_COUNT := 7500
-const GRASS_RADIUS := 48.0
-const GRASS_UPDATE_STEP := 5.0
 
 # --- Neblina Atmosferica ---
 const HORIZON_FOG_COLOR := Color(0.69, 0.86, 0.98)
@@ -57,12 +52,7 @@ var tex_snow: Texture2D
 var tex_forest: Texture2D
 var _loaded_texture_names: Array[String] = []
 
-var _grass_mm: MultiMesh
-var _last_grass_center := Vector2(99999.0, 99999.0)
-var _grass_offsets: PackedVector3Array
-var _grass_scales: PackedVector2Array
-var _grass_rotations: PackedFloat32Array
-var _grass_colors: PackedColorArray
+var chunk_manager: ChunkManager
 
 func _ensure_noises_initialized() -> void:
 	if _noises_ready:
@@ -84,40 +74,40 @@ func _ensure_noises_initialized() -> void:
 	tint_noise.fractal_octaves = 2
 	_noises_ready = true
 
-func _make_marker_rock(position_x: float, position_z: float, size: Vector3) -> void:
-	var rock := MeshInstance3D.new()
-	var mesh := SphereMesh.new()
-	mesh.radius = 1.0
-	mesh.height = 1.4
-	mesh.radial_segments = 7
-	mesh.rings = 4
-	rock.mesh = mesh
-	rock.scale = size
-	rock.position = Vector3(position_x, size.y * 0.55, position_z)
-	var stone := StandardMaterial3D.new()
-	stone.albedo_color = Color(0.45, 0.48, 0.39)
-	stone.roughness = 1.0
-	rock.material_override = stone
-	add_child(rock)
-
 func _ready() -> void:
 	_ensure_noises_initialized()
 	_load_terrain_textures()
-	_build_chunks()
+
+	var shared_terrain_mat := _make_terrain_blend_material()
+	chunk_manager = ChunkManager.new()
+	chunk_manager.name = "ChunkManager"
+	chunk_manager.setup(self, shared_terrain_mat)
+	add_child(chunk_manager)
+
+	# Gera imediatamente os chunks sob o spawn do jogador antes de liberar o movimento
+	var spawn_pos := _find_focus_position()
+	chunk_manager.ensure_initial_chunks_around(spawn_pos, 1)
 	_cache_active = true
-	_init_dynamic_grass()
-	_update_grass_around(Vector2.ZERO)
+
 	_build_lake()
 	_build_clouds()
 	_setup_atmosphere_fog()
 	_adjust_directional_light_bias()
 
 func _process(_delta: float) -> void:
+	if chunk_manager != null:
+		chunk_manager.update_around(_find_focus_position())
+
+func _find_focus_position() -> Vector3:
+	var root := get_parent()
+	if root != null:
+		var player_node := root.get_node_or_null("Player") as Node3D
+		if player_node != null:
+			return player_node.global_position
 	var cam := get_viewport().get_camera_3d()
 	if cam != null:
-		var pos2d := Vector2(cam.global_position.x, cam.global_position.z)
-		if pos2d.distance_to(_last_grass_center) >= GRASS_UPDATE_STEP:
-			_update_grass_around(pos2d)
+		return cam.global_position
+	return Vector3(-4.0, 0.0, -42.0)
 
 func _compute_height_formula(x: float, z: float) -> float:
 	_ensure_noises_initialized()
@@ -138,7 +128,6 @@ func _compute_height_formula(x: float, z: float) -> float:
 
 func height_at(x: float, z: float) -> float:
 	_ensure_noises_initialized()
-	# Usa a grade em cache apenas dentro da area ja gerada; fora dela, calcula direto pela formula.
 	if _cache_active and absf(x) <= CACHE_HALF_EXTENT and absf(z) <= CACHE_HALF_EXTENT:
 		var gx := int(roundf(x / CACHE_STEP))
 		var gz := int(roundf(z / CACHE_STEP))
@@ -152,6 +141,17 @@ func height_at(x: float, z: float) -> float:
 			_height_cache[key] = h
 			return h
 	return _compute_height_formula(x, z)
+
+func get_terrain_normal(x: float, z: float) -> Vector3:
+	var e := 0.5
+	var dx := (height_at(x + e, z) - height_at(x - e, z)) / (2.0 * e)
+	var dz := (height_at(x, z + e) - height_at(x, z - e)) / (2.0 * e)
+	return Vector3(-dx, 1.0, -dz).normalized()
+
+func get_patch_mask(x: float, z: float) -> Color:
+	_ensure_noises_initialized()
+	var u := clampf(tint_noise.get_noise_2d(x, z) * 0.5 + 0.5, 0.0, 1.0)
+	return Color(u, u, u, 1.0)
 
 func _try_load_first_existing(candidates: Array[String], fallback: Texture2D, slot_label: String) -> Texture2D:
 	for file_name in candidates:
@@ -323,242 +323,6 @@ void fragment() {
 	sm.set_shader_parameter("u_snow_end", SNOW_ALTITUDE_END)
 	sm.set_shader_parameter("u_contrast", TERRAIN_CONTRAST)
 	return sm
-
-func _patch_mask_at(x: float, z: float) -> Color:
-	_ensure_noises_initialized()
-	var u := clampf(tint_noise.get_noise_2d(x, z) * 0.5 + 0.5, 0.0, 1.0)
-	return Color(u, u, u, 1.0)
-
-func _make_fine_grass_texture() -> ImageTexture:
-	var w := 128
-	var h := 128
-	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0, 0, 0, 0))
-
-	var rng := RandomNumberGenerator.new()
-	rng.seed = WORLD_SEED ^ 0x16062
-
-	for b in range(34):
-		var base_x := rng.randf_range(16.0, float(w - 16))
-		var tip_x := base_x + rng.randf_range(-14.0, 14.0)
-		var blade_h := rng.randf_range(44.0, 112.0)
-		var base_w := rng.randf_range(1.6, 3.0)
-		var has_flower := rng.randf() < 0.24
-		var is_pink_flower := rng.randf() < 0.45
-
-		var col_base := Color(0.28, 0.44, 0.17).lerp(Color(0.36, 0.54, 0.21), rng.randf())
-		var col_tip := Color(0.54, 0.72, 0.28).lerp(Color(0.72, 0.82, 0.35), rng.randf())
-		var flower_col := Color(0.92, 0.66, 0.64) if is_pink_flower else Color(0.98, 0.90, 0.42)
-
-		var steps := int(blade_h)
-		for s in range(steps):
-			var t := float(s) / maxf(1.0, blade_h)
-			var y := h - 1 - s
-			if y < 0:
-				break
-			var curve := sin(t * PI * 0.5)
-			var cx := lerpf(base_x, tip_x, curve * curve)
-			var half_w := maxf(0.5, base_w * (1.0 - t * 0.88))
-			var c := col_base.lerp(col_tip, t)
-			if has_flower and t > 0.66:
-				var bud := sin(t * 46.0) * 0.5 + 0.5
-				half_w += bud * 1.1
-				c = c.lerp(flower_col, 0.75 + bud * 0.25)
-
-			var x0 := clampi(int(cx - half_w), 0, w - 1)
-			var x1 := clampi(int(cx + half_w), 0, w - 1)
-			for px in range(x0, x1 + 1):
-				img.set_pixel(px, y, Color(c.r, c.g, c.b, 1.0))
-
-	img.generate_mipmaps()
-	return ImageTexture.create_from_image(img)
-
-func _build_star_tuft_mesh(half_width: float, height: float) -> ArrayMesh:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var angles := [0.0, PI / 3.0, 2.0 * PI / 3.0]
-	for ang in angles:
-		var dx := cos(ang) * half_width
-		var dz := sin(ang) * half_width
-		var p0 := Vector3(-dx, 0.0, -dz)
-		var p1 := Vector3(dx, 0.0, dz)
-		var p2 := Vector3(-dx, height, -dz)
-		var p3 := Vector3(dx, height, dz)
-		st.set_uv(Vector2(0.0, 1.0)); st.set_normal(Vector3.UP); st.add_vertex(p0)
-		st.set_uv(Vector2(1.0, 1.0)); st.set_normal(Vector3.UP); st.add_vertex(p1)
-		st.set_uv(Vector2(0.0, 0.0)); st.set_normal(Vector3.UP); st.add_vertex(p2)
-
-		st.set_uv(Vector2(1.0, 1.0)); st.set_normal(Vector3.UP); st.add_vertex(p1)
-		st.set_uv(Vector2(1.0, 0.0)); st.set_normal(Vector3.UP); st.add_vertex(p3)
-		st.set_uv(Vector2(0.0, 0.0)); st.set_normal(Vector3.UP); st.add_vertex(p2)
-	return st.commit()
-
-func _init_dynamic_grass() -> void:
-	var tuft_mesh := _build_star_tuft_mesh(0.42, 1.0)
-	var mat := ShaderMaterial.new()
-	var shader := Shader.new()
-	shader.code = """
-shader_type spatial;
-render_mode cull_disabled, depth_draw_opaque, unshaded;
-
-uniform sampler2D grass_tex : source_color, filter_linear_mipmap;
-
-void vertex() {
-	float sway_mask = 1.0 - UV.y;
-	vec3 world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	float gust = sin(TIME * 1.9 + world_pos.x * 0.34 + world_pos.z * 0.28) * 0.12;
-	VERTEX.x += gust * sway_mask;
-	VERTEX.z += gust * 0.65 * sway_mask;
-}
-
-void fragment() {
-	vec4 tex = texture(grass_tex, UV);
-	if (tex.a < 0.42) {
-		discard;
-	}
-	float cam_dist = length(VERTEX);
-	float dist_fade = 1.0 - smoothstep(32.0, 47.0, cam_dist);
-	if (dist_fade < 0.05) {
-		discard;
-	}
-	float height_grad = clamp(1.0 - UV.y, 0.0, 1.0);
-	vec3 root_shade = vec3(0.62, 0.70, 0.46);
-	vec3 sun_lit = vec3(1.04, 1.03, 0.94);
-	vec3 light_tint = mix(root_shade, sun_lit, smoothstep(0.0, 0.72, height_grad));
-	ALBEDO = tex.rgb * COLOR.rgb * light_tint;
-}
-"""
-	mat.shader = shader
-	mat.set_shader_parameter("grass_tex", _make_fine_grass_texture())
-	tuft_mesh.surface_set_material(0, mat)
-
-	_grass_mm = MultiMesh.new()
-	_grass_mm.transform_format = MultiMesh.TRANSFORM_3D
-	_grass_mm.use_colors = true
-	_grass_mm.mesh = tuft_mesh
-	_grass_mm.instance_count = GRASS_COUNT
-
-	_grass_offsets.resize(GRASS_COUNT)
-	_grass_scales.resize(GRASS_COUNT)
-	_grass_rotations.resize(GRASS_COUNT)
-	_grass_colors.resize(GRASS_COUNT)
-
-	var rng := RandomNumberGenerator.new()
-	rng.seed = WORLD_SEED ^ 0xBD0CB
-	for i in range(GRASS_COUNT):
-		var r := sqrt(rng.randf()) * GRASS_RADIUS
-		var theta := rng.randf() * TAU
-		_grass_offsets[i] = Vector3(cos(theta) * r, 0.0, sin(theta) * r)
-		_grass_scales[i] = Vector2(rng.randf_range(0.75, 1.15), rng.randf_range(0.26, 0.64))
-		_grass_rotations[i] = rng.randf() * TAU
-		_grass_colors[i] = Color(0.86, 0.95, 0.76).lerp(Color(1.05, 1.00, 0.80), rng.randf())
-
-	var grass_node := MultiMeshInstance3D.new()
-	grass_node.name = "StylizedGrassField"
-	grass_node.multimesh = _grass_mm
-	grass_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(grass_node)
-
-func _update_grass_around(center: Vector2) -> void:
-	_last_grass_center = center
-	var span := GRASS_RADIUS * 2.0
-	var idx := 0
-	for i in range(GRASS_COUNT):
-		var wx := center.x + fposmod((_grass_offsets[i].x - center.x) + GRASS_RADIUS, span) - GRASS_RADIUS
-		var wz := center.y + fposmod((_grass_offsets[i].z - center.y) + GRASS_RADIUS, span) - GRASS_RADIUS
-		var p := Vector2(wx, wz)
-		if p.distance_to(center) > GRASS_RADIUS:
-			continue
-		if p.distance_to(LAKE_CENTER) < LAKE_RADIUS + 2.0:
-			continue
-		var y := height_at(wx, wz)
-		if y < WATER_LEVEL + 0.14:
-			continue
-		var sc := _grass_scales[i]
-		var t := Transform3D().scaled(Vector3(sc.x, sc.y, sc.x)).rotated(Vector3.UP, _grass_rotations[i])
-		t.origin = Vector3(wx, y - 0.03, wz)
-		_grass_mm.set_instance_transform(idx, t)
-		_grass_mm.set_instance_color(idx, _grass_colors[i])
-		idx += 1
-	_grass_mm.visible_instance_count = idx
-
-func _terrain_normal(x: float, z: float) -> Vector3:
-	var e := 0.5
-	var dx := (height_at(x + e, z) - height_at(x - e, z)) / (2.0 * e)
-	var dz := (height_at(x, z + e) - height_at(x, z - e)) / (2.0 * e)
-	return Vector3(-dx, 1.0, -dz).normalized()
-
-func _build_chunks() -> void:
-	var shared_terrain_mat := _make_terrain_blend_material()
-	for cx in range(CHUNKS):
-		for cz in range(CHUNKS):
-			var ox: float = (float(cx) - CHUNKS * 0.5) * CHUNK_SIZE
-			var oz: float = (float(cz) - CHUNKS * 0.5) * CHUNK_SIZE
-			_build_chunk(ox, oz, shared_terrain_mat)
-	_make_marker_rock(18.0, -42.0, Vector3(0.65, 0.42, 0.58))
-	_make_marker_rock(34.0, -42.0, Vector3(0.9, 0.55, 0.75))
-	_make_marker_rock(50.0, -42.0, Vector3(1.1, 0.7, 0.9))
-	_make_marker_rock(56.0, -36.0, Vector3(0.7, 0.45, 0.65))
-
-func _build_chunk(ox: float, oz: float, shared_mat: Material) -> void:
-	var stride := CELLS + 1
-	var count := stride * stride
-	var pts := PackedVector3Array()
-	var norms := PackedVector3Array()
-	var masks := PackedColorArray()
-	pts.resize(count)
-	norms.resize(count)
-	masks.resize(count)
-
-	var cell_step := CHUNK_SIZE / float(CELLS)
-	for gz in range(stride):
-		var wz := oz + float(gz) * cell_step
-		for gx in range(stride):
-			var wx := ox + float(gx) * cell_step
-			var idx := gz * stride + gx
-			var wy := _compute_height_formula(wx, wz)
-			pts[idx] = Vector3(wx, wy, wz)
-			norms[idx] = _terrain_normal(wx, wz)
-			masks[idx] = _patch_mask_at(wx, wz)
-
-			# Preenche a grade de cache para pontos alinhados dentro da area gerada
-			if absf(wx) <= CACHE_HALF_EXTENT and absf(wz) <= CACHE_HALF_EXTENT:
-				var cgx := int(roundf(wx / CACHE_STEP))
-				var cgz := int(roundf(wz / CACHE_STEP))
-				if is_equal_approx(wx, float(cgx) * CACHE_STEP) and is_equal_approx(wz, float(cgz) * CACHE_STEP):
-					_height_cache[Vector2i(cgx, cgz)] = wy
-
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for z in range(CELLS):
-		for x in range(CELLS):
-			var i00 := z * stride + x
-			var i10 := i00 + 1
-			var i01 := (z + 1) * stride + x
-			var i11 := i01 + 1
-
-			st.set_color(masks[i00]); st.set_normal(norms[i00]); st.add_vertex(pts[i00])
-			st.set_color(masks[i10]); st.set_normal(norms[i10]); st.add_vertex(pts[i10])
-			st.set_color(masks[i01]); st.set_normal(norms[i01]); st.add_vertex(pts[i01])
-
-			st.set_color(masks[i10]); st.set_normal(norms[i10]); st.add_vertex(pts[i10])
-			st.set_color(masks[i11]); st.set_normal(norms[i11]); st.add_vertex(pts[i11])
-			st.set_color(masks[i01]); st.set_normal(norms[i01]); st.add_vertex(pts[i01])
-
-	var mesh := st.commit()
-	var ground := MeshInstance3D.new()
-	ground.mesh = mesh
-	ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	ground.material_override = shared_mat
-	add_child(ground)
-
-	var body := StaticBody3D.new()
-	var cs := CollisionShape3D.new()
-	var trimesh := mesh.create_trimesh_shape()
-	trimesh.backface_collision = true
-	cs.shape = trimesh
-	body.add_child(cs)
-	add_child(body)
 
 func _build_clouds() -> void:
 	var dome := MeshInstance3D.new()

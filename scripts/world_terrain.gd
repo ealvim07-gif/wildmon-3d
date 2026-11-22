@@ -23,12 +23,25 @@ const CACHE_STEP := 2.0
 const GRASS_SCALE_NEAR := 0.22
 const GRASS_SCALE_FAR := 0.055
 const DETAIL_TEX_SCALE := 0.16
-const SLOPE_ROCK_START := 0.22
-const SLOPE_ROCK_END := 0.48
+const SLOPE_ROCK_START := 0.05 # rocha aparece em encostas a partir de ~18 graus
+const SLOPE_ROCK_END := 0.14
 const SHORE_SAND_BAND := 1.45
-const SNOW_ALTITUDE_START := 2.2
-const SNOW_ALTITUDE_END := 3.6
+const SNOW_ALTITUDE_START := 7.5 # neve so nos picos das montanhas
+const SNOW_ALTITUDE_END := 10.0
 const TERRAIN_CONTRAST := 1.05
+
+# --- Biomas e relevo (ajuste aqui) ---
+const LAND_BASE_M := 0.9          # altura media do chao fora da planicie inicial (acima da agua = sem alagamento)
+const LAND_AMPLITUDE_M := 1.6     # ondulacao de prados e florestas
+const MOUNTAIN_AMPLITUDE_M := 5.0 # ondulacao extra nas montanhas
+const MOUNTAIN_LIFT_M := 7.0      # quanto as montanhas sobem
+const MOUNTAIN_START := 0.60      # quanto menor, mais montanhas (0.60 = cerca de 20% do mapa)
+const MOUNTAIN_FULL := 0.74
+const FOREST_START := 0.58        # quanto menor, mais florestas (0.58 = cerca de 30% do mapa)
+const FOREST_FULL := 0.68
+const LAKE_NOISE_START := 0.44    # quanto menor, mais lagos
+const LAKE_NOISE_FULL := 0.60
+const LAKE_DEPTH_M := 3.6
 
 # --- Neblina Atmosferica e corte de visao (esconde surgimento de chunks) ---
 const HORIZON_FOG_COLOR := Color(0.69, 0.86, 0.98)
@@ -45,6 +58,8 @@ const DRY_EARTH := Color(0.50, 0.45, 0.27)
 var height_noise := FastNoiseLite.new()
 var lake_noise := FastNoiseLite.new()
 var tint_noise := FastNoiseLite.new()
+var mount_noise := FastNoiseLite.new()
+var humid_noise := FastNoiseLite.new()
 var _noises_ready := false
 
 var _height_cache: Dictionary = {}
@@ -52,6 +67,7 @@ var _cache_active := false
 
 var tex_grass: Texture2D
 var tex_ground: Texture2D
+var tex_sand: Texture2D
 var tex_rock: Texture2D
 var tex_snow: Texture2D
 var tex_forest: Texture2D
@@ -78,6 +94,16 @@ func _ensure_noises_initialized() -> void:
 	tint_noise.frequency = 0.016
 	tint_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
 	tint_noise.fractal_octaves = 2
+
+	mount_noise.seed = WORLD_SEED ^ 0x7B11
+	mount_noise.frequency = 0.0035
+	mount_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	mount_noise.fractal_octaves = 2
+
+	humid_noise.seed = WORLD_SEED ^ 0x2F43
+	humid_noise.frequency = 0.0045
+	humid_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	humid_noise.fractal_octaves = 2
 	_noises_ready = true
 
 func _ready() -> void:
@@ -128,16 +154,18 @@ func _compute_height_formula(x: float, z: float) -> float:
 	if p.length() <= FLAT_RADIUS:
 		return 0.0
 	var fade := smoothstep(FLAT_RADIUS, FLAT_RADIUS + 22.0, p.length())
-	var hills := height_noise.get_noise_2d(x, z) * 4.0
+	var m := mountain_amount(x, z)
+	var base := height_noise.get_noise_2d(x, z)
+	var land := LAND_BASE_M + base * (LAND_AMPLITUDE_M + MOUNTAIN_AMPLITUDE_M * m) + MOUNTAIN_LIFT_M * m * m
 	var lake_distance := p.distance_to(LAKE_CENTER)
 	var lake_basin := -3.0 * (1.0 - smoothstep(LAKE_RADIUS - 4.0, LAKE_RADIUS + 8.0, lake_distance))
 	var d_a := p.distance_to(Vector2(132.0, 24.0)) / 24.0
 	var d_b := p.distance_to(Vector2(94.0, -32.0)) / 23.0
-	var hill_a := 3.8 * exp(-d_a * 2.0)
-	var hill_b := 3.5 * exp(-d_b * 2.0)
-	var basin_mask := smoothstep(0.50, 0.68, lake_noise.get_noise_2d(x, z))
-	var basin := -1.85 * basin_mask
-	return (hills + basin + hill_a + hill_b + lake_basin) * fade
+	var hill_a := 3.8 * exp(-d_a * d_a * 2.0)
+	var hill_b := 3.5 * exp(-d_b * d_b * 2.0)
+	var lake_w := smoothstep(LAKE_NOISE_START, LAKE_NOISE_FULL, lake_noise.get_noise_2d(x, z))
+	var basin := -LAKE_DEPTH_M * lake_w * (1.0 - m)
+	return (land + basin + hill_a + hill_b + lake_basin) * fade
 
 func height_at(x: float, z: float) -> float:
 	_ensure_noises_initialized()
@@ -161,10 +189,43 @@ func get_terrain_normal(x: float, z: float) -> Vector3:
 	var dz := (height_at(x, z + e) - height_at(x, z - e)) / (2.0 * e)
 	return Vector3(-dx, 1.0, -dz).normalized()
 
+# 0 = sem montanha, 1 = montanha completa
+func mountain_amount(x: float, z: float) -> float:
+	_ensure_noises_initialized()
+	var n := mount_noise.get_noise_2d(x, z) * 0.5 + 0.5
+	return smoothstep(MOUNTAIN_START, MOUNTAIN_FULL, n)
+
+# 0 = sem floresta, 1 = floresta completa (nunca dentro de montanha)
+func forest_amount(x: float, z: float) -> float:
+	_ensure_noises_initialized()
+	var n := humid_noise.get_noise_2d(x, z) * 0.5 + 0.5
+	return smoothstep(FOREST_START, FOREST_FULL, n) * (1.0 - mountain_amount(x, z))
+
+# Nome do bioma no ponto: "lago", "praia", "montanha_nevada", "montanha", "floresta" ou "prado".
+func get_biome(x: float, z: float) -> String:
+	var h := height_at(x, z)
+	if h <= WATER_LEVEL - 0.6:
+		return "lago"
+	if h < WATER_LEVEL + 1.0:
+		return "praia"
+	if mountain_amount(x, z) > 0.5:
+		if h > SNOW_ALTITUDE_START:
+			return "montanha_nevada"
+		return "montanha"
+	if forest_amount(x, z) > 0.5:
+		return "floresta"
+	return "prado"
+
+# Cor de vertice usada pelo shader do chao: valor alto = textura de floresta, valor baixo = mais terra.
 func get_patch_mask(x: float, z: float) -> Color:
 	_ensure_noises_initialized()
 	var u := clampf(tint_noise.get_noise_2d(x, z) * 0.5 + 0.5, 0.0, 1.0)
-	return Color(u, u, u, 1.0)
+	var m := mountain_amount(x, z)
+	var f := forest_amount(x, z)
+	var meadow := 0.32 + u * 0.30
+	var r := lerpf(meadow, 0.95, f)
+	r = lerpf(r, 0.30 + u * 0.20, m)
+	return Color(r, r, r, 1.0)
 
 func _try_load_first_existing(candidates: Array[String], fallback: Texture2D, slot_label: String) -> Texture2D:
 	for file_name in candidates:
@@ -187,9 +248,14 @@ func _load_terrain_textures() -> void:
 		"grass"
 	)
 	tex_ground = _try_load_first_existing(
-		["Ground_Color.jpg", "sand_color.jpg", "dirt_color.jpg", "path_color.jpg", "mud_color.jpg"],
+		["dirt_color.jpg", "Ground_Color.jpg", "path_color.jpg", "mud_color.jpg"],
 		tex_grass,
-		"ground_sand"
+		"dirt"
+	)
+	tex_sand = _try_load_first_existing(
+		["sand_color.jpg", "Sand_Color.jpg", "Ground_Color.jpg"],
+		tex_ground,
+		"sand"
 	)
 	tex_rock = _try_load_first_existing(
 		["Rock_Color.jpg", "rock_color.jpg"],
@@ -262,6 +328,7 @@ render_mode cull_disabled, diffuse_lambert;
 
 uniform sampler2D u_grass_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D u_ground_tex : source_color, filter_linear_mipmap, repeat_enable;
+uniform sampler2D u_sand_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D u_rock_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D u_snow_tex : source_color, filter_linear_mipmap, repeat_enable;
 uniform sampler2D u_forest_tex : source_color, filter_linear_mipmap, repeat_enable;
@@ -299,9 +366,11 @@ void fragment() {
 	vec3 base_col = mix(grass_col, forest_col, forest_w * 0.60);
 
 	vec3 ground_col = texture(u_ground_tex, xz * u_detail_scale).rgb;
+	vec3 sand_col = texture(u_sand_tex, xz * u_detail_scale).rgb;
 	float shore_w = 1.0 - smoothstep(u_water_level - 0.3, u_water_level + u_shore_band, v_world_pos.y);
 	float dirt_patch = smoothstep(0.76, 0.95, 1.0 - v_patch_mask) * 0.45;
-	base_col = mix(base_col, ground_col, clamp(max(shore_w, dirt_patch), 0.0, 1.0));
+	base_col = mix(base_col, ground_col, clamp(dirt_patch, 0.0, 1.0));
+	base_col = mix(base_col, sand_col, clamp(shore_w, 0.0, 1.0));
 
 	vec3 rock_col = texture(u_rock_tex, xz * u_detail_scale).rgb;
 	float slope = 1.0 - clamp(v_world_normal.y, 0.0, 1.0);
@@ -321,6 +390,7 @@ void fragment() {
 	sm.shader = shader
 	sm.set_shader_parameter("u_grass_tex", tex_grass)
 	sm.set_shader_parameter("u_ground_tex", tex_ground)
+	sm.set_shader_parameter("u_sand_tex", tex_sand)
 	sm.set_shader_parameter("u_rock_tex", tex_rock)
 	sm.set_shader_parameter("u_snow_tex", tex_snow)
 	sm.set_shader_parameter("u_forest_tex", tex_forest)

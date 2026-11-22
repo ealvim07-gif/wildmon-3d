@@ -81,7 +81,7 @@ func _ready() -> void:
 	var shared_terrain_mat := _make_terrain_blend_material()
 	chunk_manager = ChunkManager.new()
 	chunk_manager.name = "ChunkManager"
-	chunk_manager.setup(self, shared_terrain_mat)
+	chunk_manager.setup(self, shared_terrain_mat, WORLD_SEED)
 	add_child(chunk_manager)
 
 	# Gera imediatamente os chunks sob o spawn do jogador antes de liberar o movimento

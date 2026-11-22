@@ -1,34 +1,30 @@
 extends Node3D
 class_name ChunkManager
-# Gerenciador dinamico de chunks de 32 m com arvores e grama deterministicas por bioma e modelos 3D reais.
+# Gerenciador dinamico de chunks otimizado para mobile (MultiMesh para arvores + visibilidade por distancia).
 
 const CHUNK_SIZE := 32.0
 const CELLS := 12
-const CHUNK_VIEW_RADIUS := 4
+const CHUNK_VIEW_RADIUS := 3
 const MAX_CHUNKS_PER_FRAME := 1
 
-# --- Contrato de vegetacao por chunk ---
-const MAX_TREES_PER_CHUNK := 20
-const MAX_GRASS_PER_CHUNK := 1500
-const GRASS_CHUNK_MAX_DIST := 3 # Apenas chunks com distancia < 3 exibem tufos de grama
+# --- Contrato de vegetacao por chunk (otimizado para GPU mobile) ---
+const MAX_TREES_PER_CHUNK := 14
+const MAX_GRASS_PER_CHUNK := 450
+const GRASS_CHUNK_MAX_DIST := 2
+const TREE_CHUNK_MAX_DIST := 3
 
 const DECIDUOUS_CANDIDATES := [
 	"CommonTree_1",
 	"CommonTree_2",
 	"CommonTree_3",
-	"CommonTree_4",
-	"CommonTree_5",
 	"BirchTree_1",
-	"BirchTree_2",
-	"BirchTree_3"
+	"BirchTree_2"
 ]
 
 const PINE_CANDIDATES := [
 	"Pine_1",
 	"Pine_2",
-	"Pine_3",
-	"Pine_4",
-	"Pine_5"
+	"Pine_3"
 ]
 
 var _terrain: Node3D
@@ -36,11 +32,12 @@ var _shared_material: Material
 var _world_seed: int = 82471
 var _active_chunks: Dictionary = {} # Vector2i -> Node3D
 var _chunk_grass_nodes: Dictionary = {} # Vector2i -> MultiMeshInstance3D
+var _chunk_tree_nodes: Dictionary = {} # Vector2i -> Node3D
 var _last_center_chunk := Vector2i(999999, 999999)
 
 var _shared_grass_mesh: ArrayMesh
-var _deciduous_templates: Array[Node3D] = []
-var _pine_templates: Array[Node3D] = []
+var _deciduous_meshes: Array[Mesh] = []
+var _pine_meshes: Array[Mesh] = []
 var _fallback_trunk_mesh: CylinderMesh
 var _fallback_canopy_mesh: SphereMesh
 var _fallback_pine_mesh: CylinderMesh
@@ -49,22 +46,22 @@ func setup(terrain: Node3D, shared_material: Material, world_seed: int = 82471) 
 	_terrain = terrain
 	_shared_material = shared_material
 	_world_seed = world_seed
-	_load_tree_templates()
+	_load_tree_meshes()
 	_build_shared_vegetation_meshes()
 
-func _load_tree_templates() -> void:
-	_deciduous_templates.clear()
-	_pine_templates.clear()
+func _load_tree_meshes() -> void:
+	_deciduous_meshes.clear()
+	_pine_meshes.clear()
 	for model_name in DECIDUOUS_CANDIDATES:
-		var inst := _try_load_tree_model(model_name)
-		if inst != null:
-			_deciduous_templates.append(inst)
+		var m := _extract_merged_tree_mesh(model_name)
+		if m != null:
+			_deciduous_meshes.append(m)
 	for model_name in PINE_CANDIDATES:
-		var inst := _try_load_tree_model(model_name)
-		if inst != null:
-			_pine_templates.append(inst)
+		var m := _extract_merged_tree_mesh(model_name)
+		if m != null:
+			_pine_meshes.append(m)
 
-func _try_load_tree_model(model_name: String) -> Node3D:
+func _extract_merged_tree_mesh(model_name: String) -> Mesh:
 	var paths := [
 		"res://assets/nature/" + model_name + ".gltf",
 		"res://assets/nature/" + model_name + ".glb",
@@ -77,17 +74,22 @@ func _try_load_tree_model(model_name: String) -> Node3D:
 			if scene != null:
 				var inst := scene.instantiate() as Node3D
 				if inst != null:
-					_prepare_tree_template(inst)
-					return inst
+					var found := _find_first_mesh(inst)
+					inst.free()
+					if found != null:
+						return found
 	return null
 
-func _prepare_tree_template(node: Node) -> void:
-	if node is GeometryInstance3D:
-		var geom := node as GeometryInstance3D
-		geom.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		geom.visibility_range_end = 115.0
+func _find_first_mesh(node: Node) -> Mesh:
+	if node is MeshInstance3D:
+		var mi := node as MeshInstance3D
+		if mi.mesh != null:
+			return mi.mesh
 	for child in node.get_children():
-		_prepare_tree_template(child)
+		var m := _find_first_mesh(child)
+		if m != null:
+			return m
+	return null
 
 func world_to_chunk(world_pos: Vector3) -> Vector2i:
 	return Vector2i(
@@ -129,19 +131,19 @@ func compute_chunk_tree_spawns(coord: Vector2i) -> Array[Dictionary]:
 	var water_level: float = _terrain.WATER_LEVEL if _terrain.get("WATER_LEVEL") != null else -1.35
 
 	var center_biome := _get_biome_at(ox + CHUNK_SIZE * 0.5, oz + CHUNK_SIZE * 0.5)
-	var max_for_biome := 6
+	var max_for_biome := 5
 	match center_biome:
 		"floresta":
 			max_for_biome = MAX_TREES_PER_CHUNK
 		"montanha", "montanha_nevada":
-			max_for_biome = 10
+			max_for_biome = 7
 		"lago", "praia":
-			max_for_biome = 2
+			max_for_biome = 1
 		_:
-			max_for_biome = 6
+			max_for_biome = 5
 
 	var placed_points: Array[Vector2] = []
-	var attempts := MAX_TREES_PER_CHUNK * 4
+	var attempts := MAX_TREES_PER_CHUNK * 3
 	for _i in range(attempts):
 		if spawns.size() >= MAX_TREES_PER_CHUNK or spawns.size() >= max_for_biome:
 			break
@@ -151,7 +153,6 @@ func compute_chunk_tree_spawns(coord: Vector2i) -> Array[Dictionary]:
 		var wz := oz + lz
 		var p2 := Vector2(wx, wz)
 
-		# Mantem clareira livre ao redor do ponto de spawn (-4, -42)
 		if p2.distance_to(Vector2(-4.0, -42.0)) < 14.0:
 			continue
 
@@ -163,31 +164,31 @@ func compute_chunk_tree_spawns(coord: Vector2i) -> Array[Dictionary]:
 		if biome == "lago" or biome == "praia":
 			continue
 
-		var density_chance := 0.35
+		var density_chance := 0.32
 		var is_pine := false
-		var min_dist_sq := 22.0
+		var min_dist_sq := 24.0
 		var scale_min := 1.05
-		var scale_max := 1.48
+		var scale_max := 1.45
 
 		match biome:
 			"floresta":
-				density_chance = 0.92
+				density_chance = 0.88
 				is_pine = rng.randf() < 0.25
-				min_dist_sq = 14.0
+				min_dist_sq = 16.0
 				scale_min = 1.15
-				scale_max = 1.65
+				scale_max = 1.60
 			"montanha", "montanha_nevada":
-				density_chance = 0.55
+				density_chance = 0.50
 				is_pine = true
-				min_dist_sq = 18.0
+				min_dist_sq = 20.0
 				scale_min = 1.10
-				scale_max = 1.55
+				scale_max = 1.50
 			_:
-				density_chance = 0.28
+				density_chance = 0.25
 				is_pine = rng.randf() < 0.15
-				min_dist_sq = 28.0
+				min_dist_sq = 30.0
 				scale_min = 1.00
-				scale_max = 1.40
+				scale_max = 1.38
 
 		if rng.randf() > density_chance:
 			continue
@@ -232,7 +233,7 @@ func ensure_initial_chunks_around(world_pos: Vector3, initial_radius: int = 1) -
 			if not _active_chunks.has(coord):
 				_create_chunk(coord, center)
 				created += 1
-	_update_chunk_grass_visibility(center)
+	_update_chunk_lod_visibility(center)
 	if created > 0:
 		print("[CHUNKS] ativos: ", _active_chunks.size(), ", criados: ", created, ", apagados: 0")
 
@@ -255,6 +256,7 @@ func update_around(world_pos: Vector3) -> void:
 			chunk_node.queue_free()
 		_active_chunks.erase(coord)
 		_chunk_grass_nodes.erase(coord)
+		_chunk_tree_nodes.erase(coord)
 		deleted += 1
 
 	var missing: Array[Vector2i] = []
@@ -277,19 +279,24 @@ func update_around(world_pos: Vector3) -> void:
 			created += 1
 
 	if center != _last_center_chunk or created > 0:
-		_update_chunk_grass_visibility(center)
+		_update_chunk_lod_visibility(center)
 
 	if created > 0 or deleted > 0 or center != _last_center_chunk:
 		_last_center_chunk = center
 		if created > 0 or deleted > 0:
 			print("[CHUNKS] ativos: ", _active_chunks.size(), ", criados: ", created, ", apagados: ", deleted)
 
-func _update_chunk_grass_visibility(center: Vector2i) -> void:
+func _update_chunk_lod_visibility(center: Vector2i) -> void:
 	for coord in _chunk_grass_nodes.keys():
 		var grass_node: MultiMeshInstance3D = _chunk_grass_nodes[coord]
 		if is_instance_valid(grass_node):
 			var dist := maxi(absi(coord.x - center.x), absi(coord.y - center.y))
 			grass_node.visible = dist < GRASS_CHUNK_MAX_DIST
+	for coord in _chunk_tree_nodes.keys():
+		var tree_node: Node3D = _chunk_tree_nodes[coord]
+		if is_instance_valid(tree_node):
+			var dist := maxi(absi(coord.x - center.x), absi(coord.y - center.y))
+			tree_node.visible = dist <= TREE_CHUNK_MAX_DIST
 
 func _create_chunk(coord: Vector2i, current_center: Vector2i) -> void:
 	var ox := float(coord.x) * CHUNK_SIZE
@@ -349,39 +356,69 @@ func _create_chunk(coord: Vector2i, current_center: Vector2i) -> void:
 	body.add_child(cs)
 	chunk_root.add_child(body)
 
-	_populate_chunk_trees(chunk_root, coord)
-	var grass_mmi := _populate_chunk_grass(chunk_root, coord)
 	var dist := maxi(absi(coord.x - current_center.x), absi(coord.y - current_center.y))
+
+	var trees_group := _populate_chunk_trees(chunk_root, coord)
+	if trees_group != null:
+		trees_group.visible = dist <= TREE_CHUNK_MAX_DIST
+		_chunk_tree_nodes[coord] = trees_group
+
+	var grass_mmi := _populate_chunk_grass(chunk_root, coord)
 	grass_mmi.visible = dist < GRASS_CHUNK_MAX_DIST
 	_chunk_grass_nodes[coord] = grass_mmi
 
 	add_child(chunk_root)
 	_active_chunks[coord] = chunk_root
 
-func _populate_chunk_trees(chunk_root: Node3D, coord: Vector2i) -> void:
+func _populate_chunk_trees(chunk_root: Node3D, coord: Vector2i) -> Node3D:
 	var tree_spawns := compute_chunk_tree_spawns(coord)
 	if tree_spawns.is_empty():
-		return
+		return null
 
 	var trees_container := Node3D.new()
 	trees_container.name = "ChunkTrees"
 	chunk_root.add_child(trees_container)
 
+	# Agrupa por Mesh para renderizar via MultiMeshInstance3D (1 draw call por especie no chunk)
+	var buckets: Dictionary = {} # Mesh -> Array[Transform3D]
+	var fallback_items: Array[Dictionary] = []
+
 	for item in tree_spawns:
 		var wants_pine: bool = bool(item.get("pine", false))
-		var pool := _pine_templates if (wants_pine and not _pine_templates.is_empty()) else _deciduous_templates
-		if pool.is_empty() and not _pine_templates.is_empty():
-			pool = _pine_templates
+		var pool := _pine_meshes if (wants_pine and not _pine_meshes.is_empty()) else _deciduous_meshes
+		if pool.is_empty() and not _pine_meshes.is_empty():
+			pool = _pine_meshes
 
 		if not pool.is_empty():
 			var variant: int = int(item["variant"]) % pool.size()
-			var tree_node := pool[variant].duplicate() as Node3D
-			tree_node.position = item["pos"]
-			tree_node.scale = item["scale"]
-			tree_node.rotation.y = float(item["yaw"])
-			trees_container.add_child(tree_node)
+			var chosen_mesh := pool[variant]
+			var t := Transform3D().scaled(item["scale"]).rotated(Vector3.UP, float(item["yaw"]))
+			t.origin = item["pos"]
+			if not buckets.has(chosen_mesh):
+				buckets[chosen_mesh] = []
+			buckets[chosen_mesh].append(t)
 		else:
-			_add_fallback_tree(trees_container, item)
+			fallback_items.append(item)
+
+	for mesh_key in buckets.keys():
+		var t_list: Array = buckets[mesh_key]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = mesh_key
+		mm.instance_count = t_list.size()
+		for i in range(t_list.size()):
+			mm.set_instance_transform(i, t_list[i])
+
+		var mmi := MultiMeshInstance3D.new()
+		mmi.multimesh = mm
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mmi.visibility_range_end = 105.0
+		trees_container.add_child(mmi)
+
+	for item in fallback_items:
+		_add_fallback_tree(trees_container, item)
+
+	return trees_container
 
 func _add_fallback_tree(parent: Node3D, item: Dictionary) -> void:
 	var holder := Node3D.new()
@@ -490,7 +527,7 @@ func _build_shared_vegetation_meshes() -> void:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var half_width := 0.42
 	var height := 1.0
-	var angles := [0.0, PI / 3.0, 2.0 * PI / 3.0]
+	var angles := [0.0, PI / 2.0] # 2 planos cruzados em vez de 3 (corta 33% dos triangulos da grama)
 	for ang in angles:
 		var dx := cos(ang) * half_width
 		var dz := sin(ang) * half_width

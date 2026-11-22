@@ -298,13 +298,6 @@ func _physics_process(delta: float) -> void:
 		player.velocity.y = minf(player.velocity.y, 0.0)
 	player.floor_snap_length = 0.9
 	player.move_and_slide()
-	var bounded_position := player.global_position
-	bounded_position.x = clampf(bounded_position.x, -118.0, 118.0)
-	bounded_position.z = clampf(bounded_position.z, -118.0, 118.0)
-	if bounded_position != player.global_position:
-		player.global_position = bounded_position
-		player.velocity.x = 0.0
-		player.velocity.z = 0.0
 	# Recuperação defensiva: nunca deixa a câmera acompanhar o jogador sob o mapa.
 	var floor_height := _terrain_height(player.global_position.x, player.global_position.z)
 	if player.global_position.y < floor_height - 0.85 or player.global_position.y < -2.0:
